@@ -1,0 +1,200 @@
+{
+  "info": {
+    "name": "Business Networking & Vendor Directory API",
+    "description": "Complete API collection for the Vendor Directory Platform",
+    "version": "1.0.0",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:5000/api/v1", "type": "string" },
+    { "key": "accessToken", "value": "", "type": "string" },
+    { "key": "refreshToken", "value": "", "type": "string" }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+  },
+  "item": [
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Register",
+          "request": {
+            "method": "POST", "url": "{{baseUrl}}/auth/register",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"John Doe\",\n  \"email\": \"john@example.com\",\n  \"password\": \"Password@123\",\n  \"phone\": \"9876543210\",\n  \"role\": \"user\"\n}" }
+          }
+        },
+        {
+          "name": "Login",
+          "event": [{
+            "listen": "test",
+            "script": { "exec": ["const r = pm.response.json();", "if(r.data?.accessToken) {", "  pm.collectionVariables.set('accessToken', r.data.accessToken);", "  pm.collectionVariables.set('refreshToken', r.data.refreshToken);", "}"] }
+          }],
+          "request": {
+            "method": "POST", "url": "{{baseUrl}}/auth/login",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"admin@vendordirectory.com\",\n  \"password\": \"Admin@123\"\n}" }
+          }
+        },
+        { "name": "Get Me", "request": { "method": "GET", "url": "{{baseUrl}}/auth/me" } },
+        { "name": "Logout", "request": { "method": "POST", "url": "{{baseUrl}}/auth/logout" } },
+        {
+          "name": "Forgot Password",
+          "request": {
+            "method": "POST", "url": "{{baseUrl}}/auth/forgot-password",
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"john@example.com\"\n}", "options": { "raw": { "language": "json" } } }
+          }
+        },
+        {
+          "name": "Refresh Token",
+          "request": {
+            "method": "POST", "url": "{{baseUrl}}/auth/refresh-token",
+            "body": { "mode": "raw", "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}", "options": { "raw": { "language": "json" } } }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Users",
+      "item": [
+        { "name": "Get All Users", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/users?page=1&limit=10", "query": [{"key":"page","value":"1"},{"key":"limit","value":"10"}] } } },
+        { "name": "Get User By ID", "request": { "method": "GET", "url": "{{baseUrl}}/users/:id" } },
+        { "name": "Update Profile", "request": { "method": "PATCH", "url": "{{baseUrl}}/users/profile", "body": { "mode": "raw", "raw": "{\n  \"name\": \"Updated Name\",\n  \"phone\": \"9999999999\"\n}", "options": { "raw": { "language": "json" } } } } },
+        { "name": "Suspend User", "request": { "method": "PATCH", "url": "{{baseUrl}}/users/:id/suspend", "body": { "mode": "raw", "raw": "{\n  \"reason\": \"Violation of terms\"\n}", "options": { "raw": { "language": "json" } } } } },
+        { "name": "Block User", "request": { "method": "PATCH", "url": "{{baseUrl}}/users/:id/block", "body": { "mode": "raw", "raw": "{\n  \"reason\": \"Fraudulent activity\"\n}", "options": { "raw": { "language": "json" } } } } }
+      ]
+    },
+    {
+      "name": "Vendors",
+      "item": [
+        { "name": "Get All Vendors", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/vendors?page=1&limit=10&status=approved", "query": [{"key":"page","value":"1"},{"key":"limit","value":"10"},{"key":"status","value":"approved"}] } } },
+        { "name": "Create Vendor Profile", "request": { "method": "POST", "url": "{{baseUrl}}/vendors", "body": { "mode": "formdata", "formdata": [{"key":"businessName","value":"Tech Solutions Pvt Ltd","type":"text"},{"key":"ownerName","value":"Rajesh Kumar","type":"text"},{"key":"email","value":"tech@example.com","type":"text"},{"key":"phone","value":"9876543210","type":"text"},{"key":"description","value":"We provide cutting-edge technology solutions","type":"text"},{"key":"businessCategory","value":"CATEGORY_ID_HERE","type":"text"},{"key":"address[street]","value":"123 MG Road","type":"text"},{"key":"address[city]","value":"Bangalore","type":"text"},{"key":"address[state]","value":"Karnataka","type":"text"},{"key":"address[pincode]","value":"560001","type":"text"}] } } },
+        { "name": "Get My Vendor Profile", "request": { "method": "GET", "url": "{{baseUrl}}/vendors/me/profile" } },
+        { "name": "Get Vendor By Slug", "request": { "method": "GET", "url": "{{baseUrl}}/vendors/slug/:slug" } },
+        { "name": "Approve/Reject Vendor", "request": { "method": "PATCH", "url": "{{baseUrl}}/vendors/:id/approve", "body": { "mode": "raw", "raw": "{\n  \"action\": \"approve\"\n}", "options": { "raw": { "language": "json" } } } } },
+        { "name": "Get Nearby Vendors", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/vendors/nearby?lat=12.9716&lng=77.5946&radius=10", "query": [{"key":"lat","value":"12.9716"},{"key":"lng","value":"77.5946"},{"key":"radius","value":"10"}] } } }
+      ]
+    },
+    {
+      "name": "Categories",
+      "item": [
+        { "name": "Get Categories", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/categories?type=business", "query": [{"key":"type","value":"business"}] } } },
+        { "name": "Create Category", "request": { "method": "POST", "url": "{{baseUrl}}/categories", "body": { "mode": "raw", "raw": "{\n  \"name\": \"Technology\",\n  \"type\": \"business\",\n  \"description\": \"IT and tech companies\",\n  \"icon\": \"💻\"\n}", "options": { "raw": { "language": "json" } } } } }
+      ]
+    },
+    {
+      "name": "Products",
+      "item": [
+        { "name": "Get Products", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/products?page=1&limit=10", "query": [{"key":"page","value":"1"},{"key":"limit","value":"10"}] } } },
+        { "name": "Create Product", "request": { "method": "POST", "url": "{{baseUrl}}/products", "body": { "mode": "formdata", "formdata": [{"key":"title","value":"Laptop Stand","type":"text"},{"key":"description","value":"Ergonomic aluminum laptop stand","type":"text"},{"key":"category","value":"CATEGORY_ID","type":"text"},{"key":"pricing[mrp]","value":"2999","type":"text"},{"key":"pricing[sellingPrice]","value":"1999","type":"text"},{"key":"inventory[quantity]","value":"100","type":"text"}] } } },
+        { "name": "Approve Product", "request": { "method": "PATCH", "url": "{{baseUrl}}/products/:id/approve", "body": { "mode": "raw", "raw": "{\n  \"action\": \"approve\"\n}", "options": { "raw": { "language": "json" } } } } }
+      ]
+    },
+    {
+      "name": "Services",
+      "item": [
+        { "name": "Get Services", "request": { "method": "GET", "url": "{{baseUrl}}/services?page=1&limit=10" } },
+        { "name": "Create Service", "request": { "method": "POST", "url": "{{baseUrl}}/services", "body": { "mode": "formdata", "formdata": [{"key":"title","value":"Website Development","type":"text"},{"key":"description","value":"Custom website development with modern technologies","type":"text"},{"key":"category","value":"CATEGORY_ID","type":"text"},{"key":"pricing[type]","value":"fixed","type":"text"},{"key":"pricing[minPrice]","value":"15000","type":"text"}] } } }
+      ]
+    },
+    {
+      "name": "Leads",
+      "item": [
+        { "name": "Submit Enquiry", "request": { "method": "POST", "url": "{{baseUrl}}/leads", "body": { "mode": "raw", "raw": "{\n  \"vendor\": \"VENDOR_ID\",\n  \"name\": \"Priya Sharma\",\n  \"email\": \"priya@example.com\",\n  \"phone\": \"9123456789\",\n  \"subject\": \"Website development inquiry\",\n  \"message\": \"I need a website for my business\",\n  \"budget\": { \"min\": 10000, \"max\": 50000 }\n}", "options": { "raw": { "language": "json" } } } } },
+        { "name": "Get Leads", "request": { "method": "GET", "url": "{{baseUrl}}/leads?page=1&limit=10" } },
+        { "name": "Update Lead Status", "request": { "method": "PATCH", "url": "{{baseUrl}}/leads/:id/status", "body": { "mode": "raw", "raw": "{\n  \"status\": \"contacted\"\n}", "options": { "raw": { "language": "json" } } } } },
+        { "name": "Add Note", "request": { "method": "POST", "url": "{{baseUrl}}/leads/:id/notes", "body": { "mode": "raw", "raw": "{\n  \"content\": \"Called the client, they are interested\",\n  \"isInternal\": true\n}", "options": { "raw": { "language": "json" } } } } },
+        { "name": "Lead Analytics", "request": { "method": "GET", "url": "{{baseUrl}}/leads/analytics" } }
+      ]
+    },
+    {
+      "name": "Memberships",
+      "item": [
+        { "name": "Get Plans", "request": { "method": "GET", "url": "{{baseUrl}}/memberships/plans" } },
+        { "name": "Purchase Membership", "request": { "method": "POST", "url": "{{baseUrl}}/memberships/purchase", "body": { "mode": "raw", "raw": "{\n  \"plan\": \"gold\",\n  \"billingCycle\": \"monthly\"\n}", "options": { "raw": { "language": "json" } } } } },
+        { "name": "Get My Membership", "request": { "method": "GET", "url": "{{baseUrl}}/memberships/my" } }
+      ]
+    },
+    {
+      "name": "Payments",
+      "item": [
+        { "name": "Create Razorpay Order", "request": { "method": "POST", "url": "{{baseUrl}}/payments/razorpay/order", "body": { "mode": "raw", "raw": "{\n  \"vendorId\": \"VENDOR_ID\",\n  \"type\": \"membership\",\n  \"amount\": 2499,\n  \"currency\": \"INR\",\n  \"description\": \"Gold Membership - Monthly\"\n}", "options": { "raw": { "language": "json" } } } } },
+        { "name": "Verify Razorpay Payment", "request": { "method": "POST", "url": "{{baseUrl}}/payments/razorpay/verify", "body": { "mode": "raw", "raw": "{\n  \"paymentId\": \"PAYMENT_ID\",\n  \"razorpay_order_id\": \"order_xxx\",\n  \"razorpay_payment_id\": \"pay_xxx\",\n  \"razorpay_signature\": \"signature_xxx\"\n}", "options": { "raw": { "language": "json" } } } } },
+        { "name": "Get Payment History", "request": { "method": "GET", "url": "{{baseUrl}}/payments?page=1&limit=10" } },
+        { "name": "Request Refund", "request": { "method": "POST", "url": "{{baseUrl}}/payments/:id/refund", "body": { "mode": "raw", "raw": "{\n  \"reason\": \"Service not delivered as promised\"\n}", "options": { "raw": { "language": "json" } } } } }
+      ]
+    },
+    {
+      "name": "Reviews",
+      "item": [
+        { "name": "Get Vendor Reviews", "request": { "method": "GET", "url": "{{baseUrl}}/reviews/vendor/:vendorId" } },
+        { "name": "Create Review", "request": { "method": "POST", "url": "{{baseUrl}}/reviews", "body": { "mode": "raw", "raw": "{\n  \"vendor\": \"VENDOR_ID\",\n  \"rating\": 5,\n  \"title\": \"Excellent service!\",\n  \"comment\": \"Very professional and delivered on time. Highly recommended.\"\n}", "options": { "raw": { "language": "json" } } } } },
+        { "name": "Reply To Review", "request": { "method": "POST", "url": "{{baseUrl}}/reviews/:id/reply", "body": { "mode": "raw", "raw": "{\n  \"content\": \"Thank you for your kind words!\"\n}", "options": { "raw": { "language": "json" } } } } },
+        { "name": "Moderate Review", "request": { "method": "PATCH", "url": "{{baseUrl}}/reviews/:id/moderate", "body": { "mode": "raw", "raw": "{\n  \"action\": \"approve\"\n}", "options": { "raw": { "language": "json" } } } } }
+      ]
+    },
+    {
+      "name": "Events",
+      "item": [
+        { "name": "Get Events", "request": { "method": "GET", "url": "{{baseUrl}}/events?upcoming=true" } },
+        { "name": "Create Event", "request": { "method": "POST", "url": "{{baseUrl}}/events", "body": { "mode": "raw", "raw": "{\n  \"title\": \"Business Networking Night 2025\",\n  \"description\": \"Join us for an evening of networking with top business leaders\",\n  \"type\": \"offline\",\n  \"venue\": { \"name\": \"Hotel Leela Palace\", \"city\": \"Bangalore\", \"state\": \"Karnataka\" },\n  \"startDate\": \"2025-06-15T18:00:00\",\n  \"endDate\": \"2025-06-15T21:00:00\",\n  \"status\": \"published\",\n  \"registration\": { \"isRequired\": true, \"isFree\": true, \"maxAttendees\": 200 }\n}", "options": { "raw": { "language": "json" } } } } },
+        { "name": "Register For Event", "request": { "method": "POST", "url": "{{baseUrl}}/events/:id/register" } }
+      ]
+    },
+    {
+      "name": "Directory",
+      "item": [
+        { "name": "Search Directory", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/directory/search?q=tech&city=Bangalore&page=1", "query": [{"key":"q","value":"tech"},{"key":"city","value":"Bangalore"},{"key":"page","value":"1"}] } } },
+        { "name": "Featured Listings", "request": { "method": "GET", "url": "{{baseUrl}}/directory/featured" } },
+        { "name": "Nearby Vendors", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/directory/nearby?lat=12.9716&lng=77.5946&radius=5", "query": [{"key":"lat","value":"12.9716"},{"key":"lng","value":"77.5946"},{"key":"radius","value":"5"}] } } },
+        { "name": "Global Search", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/directory/global-search?q=website", "query": [{"key":"q","value":"website"}] } } }
+      ]
+    },
+    {
+      "name": "Notifications",
+      "item": [
+        { "name": "Get Notifications", "request": { "method": "GET", "url": "{{baseUrl}}/notifications?page=1&limit=20" } },
+        { "name": "Get Unread Count", "request": { "method": "GET", "url": "{{baseUrl}}/notifications/unread-count" } },
+        { "name": "Mark All As Read", "request": { "method": "PATCH", "url": "{{baseUrl}}/notifications/read-all" } },
+        { "name": "Send Broadcast (Admin)", "request": { "method": "POST", "url": "{{baseUrl}}/notifications/broadcast", "body": { "mode": "raw", "raw": "{\n  \"title\": \"Platform Update\",\n  \"message\": \"We have added exciting new features!\",\n  \"type\": \"announcement\"\n}", "options": { "raw": { "language": "json" } } } } }
+      ]
+    },
+    {
+      "name": "Support",
+      "item": [
+        { "name": "Create Ticket", "request": { "method": "POST", "url": "{{baseUrl}}/support", "body": { "mode": "raw", "raw": "{\n  \"subject\": \"Unable to update vendor profile\",\n  \"description\": \"When I try to update my profile, I get an error message\",\n  \"category\": \"technical\",\n  \"priority\": \"medium\"\n}", "options": { "raw": { "language": "json" } } } } },
+        { "name": "Get My Tickets", "request": { "method": "GET", "url": "{{baseUrl}}/support/my" } },
+        { "name": "Reply To Ticket", "request": { "method": "POST", "url": "{{baseUrl}}/support/:id/reply", "body": { "mode": "raw", "raw": "{\n  \"message\": \"Please check the attached screenshot\"\n}", "options": { "raw": { "language": "json" } } } } }
+      ]
+    },
+    {
+      "name": "Reports (Admin)",
+      "item": [
+        { "name": "Dashboard Summary", "request": { "method": "GET", "url": "{{baseUrl}}/reports/dashboard" } },
+        { "name": "User Report", "request": { "method": "GET", "url": "{{baseUrl}}/reports/users?from=2025-01-01&to=2025-12-31" } },
+        { "name": "Revenue Report", "request": { "method": "GET", "url": "{{baseUrl}}/reports/revenue?from=2025-01-01" } },
+        { "name": "Vendor Report", "request": { "method": "GET", "url": "{{baseUrl}}/reports/vendors" } },
+        { "name": "Lead Report", "request": { "method": "GET", "url": "{{baseUrl}}/reports/leads" } }
+      ]
+    },
+    {
+      "name": "Referrals",
+      "item": [
+        { "name": "Get My Referrals", "request": { "method": "GET", "url": "{{baseUrl}}/referrals/my" } },
+        { "name": "Get My Referral Code", "request": { "method": "GET", "url": "{{baseUrl}}/referrals/my/code" } },
+        { "name": "Get Referral Stats", "request": { "method": "GET", "url": "{{baseUrl}}/referrals/my/stats" } }
+      ]
+    },
+    {
+      "name": "Admin",
+      "item": [
+        { "name": "Dashboard", "request": { "method": "GET", "url": "{{baseUrl}}/admin/dashboard" } },
+        { "name": "Pending Approvals", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/admin/pending-approvals?type=vendor", "query": [{"key":"type","value":"vendor"}] } } },
+        { "name": "Audit Logs", "request": { "method": "GET", "url": "{{baseUrl}}/admin/audit-logs?page=1&limit=20" } },
+        { "name": "Create Admin", "request": { "method": "POST", "url": "{{baseUrl}}/admin/create-admin", "body": { "mode": "raw", "raw": "{\n  \"name\": \"New Admin\",\n  \"email\": \"newadmin@vendordirectory.com\",\n  \"password\": \"Admin@123\",\n  \"phone\": \"9000000000\"\n}", "options": { "raw": { "language": "json" } } } } }
+      ]
+    }
+  ]
+}
