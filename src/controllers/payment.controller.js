@@ -3,8 +3,16 @@ const { asyncHandler } = require("../middleware/errorHandler");
 const { successResponse, paginatedResponse } = require("../utils/response");
 
 exports.createRazorpayOrder = asyncHandler(async (req, res) => {
-  const { vendorId, type, amount, currency, description } = req.body;
-  const result = await paymentService.createRazorpayOrder(req.user._id, vendorId, type, amount, currency, description);
+  const { vendorId, type, amount, currency, description, membershipId, eventId } = req.body;
+  const result = await paymentService.createRazorpayOrder(
+    req.user._id,
+    vendorId,
+    type,
+    amount,
+    currency,
+    description,
+    { membershipId, eventId }
+  );
   successResponse(res, 201, "Razorpay order created", result);
 });
 
@@ -26,6 +34,12 @@ exports.stripeWebhook = asyncHandler(async (req, res) => {
   res.json(result);
 });
 
+exports.razorpayWebhook = asyncHandler(async (req, res) => {
+  const signature = req.headers["x-razorpay-signature"];
+  const result = await paymentService.handleRazorpayWebhook(req.body, signature);
+  res.json(result);
+});
+
 exports.requestRefund = asyncHandler(async (req, res) => {
   const { reason, amount } = req.body;
   const result = await paymentService.requestRefund(req.params.id, req.user._id, reason, amount);
@@ -40,4 +54,14 @@ exports.getPayments = asyncHandler(async (req, res) => {
 exports.getPaymentById = asyncHandler(async (req, res) => {
   const payment = await paymentService.getPaymentById(req.params.id, req.user._id, req.user.role);
   successResponse(res, 200, "Payment retrieved", payment);
+});
+
+exports.getInvoices = asyncHandler(async (req, res) => {
+  const { payments, total, page, limit } = await paymentService.getInvoices(req.query, req.user._id, req.user.role);
+  paginatedResponse(res, payments, page, limit, total, "Invoices retrieved");
+});
+
+exports.getTransactions = asyncHandler(async (req, res) => {
+  const { payments, total, page, limit } = await paymentService.getPayments(req.query, req.user._id, req.user.role);
+  paginatedResponse(res, payments, page, limit, total, "Transactions retrieved");
 });

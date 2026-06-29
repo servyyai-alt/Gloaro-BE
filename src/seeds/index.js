@@ -4,6 +4,9 @@ const User = require("../models/User");
 const Category = require("../models/Category");
 const Vendor = require("../models/Vendor");
 const { MembershipPlan } = require("../models/Membership");
+const Banner = require("../models/Banner");
+const FAQ = require("../models/FAQ");
+const Setting = require("../models/Setting");
 const logger = require("../utils/logger");
 
 const connectDB = async () => {
@@ -12,7 +15,17 @@ const connectDB = async () => {
 };
 
 const seedUsers = async () => {
-  await User.deleteMany({ role: { $in: ["superadmin", "admin"] } });
+  await User.deleteMany({
+    email: {
+      $in: [
+        "superadmin@vendordirectory.com",
+        "admin@vendordirectory.com",
+        "vendor@vendordirectory.com",
+        "user@vendordirectory.com",
+        "customer@vendordirectory.com",
+      ],
+    },
+  });
 
   const users = [
     {
@@ -41,19 +54,73 @@ const seedUsers = async () => {
       isActive: true,
     },
     {
-      name: "Test User",
-      email: "user@vendordirectory.com",
-      password: "User@123",
-      role: "user",
+      name: "Test Customer",
+      email: "customer@vendordirectory.com",
+      password: "Customer@123",
+      role: "customer",
       phone: "9876543211",
       isEmailVerified: true,
       isActive: true,
     },
   ];
 
-  const created = await User.insertMany(users);
+  const created = await User.create(users);
   logger.info(`✅ Seeded ${created.length} users`);
   return created;
+};
+
+const seedCMS = async () => {
+  await Promise.all([
+    Banner.deleteMany({}),
+    FAQ.deleteMany({}),
+    Setting.deleteMany({}),
+  ]);
+
+  const [banners, faqs, settings] = await Promise.all([
+    Banner.insertMany([
+      {
+        title: "Grow with Gloaro",
+        subtitle: "Connect with verified businesses, services, and products near you.",
+        placement: "home",
+        order: 1,
+        isActive: true,
+      },
+      {
+        title: "Premium Vendor Memberships",
+        subtitle: "Unlock featured listings, analytics, and priority support.",
+        placement: "directory",
+        order: 2,
+        isActive: true,
+      },
+    ]),
+    FAQ.insertMany([
+      {
+        question: "How do I become a vendor?",
+        answer: "Create an account, submit your business profile, and wait for admin verification.",
+        category: "vendors",
+        order: 1,
+      },
+      {
+        question: "How do customers contact vendors?",
+        answer: "Customers can submit enquiries from vendor, product, or service pages.",
+        category: "customers",
+        order: 2,
+      },
+      {
+        question: "How are memberships activated?",
+        answer: "Free plans activate immediately. Paid plans activate after successful Razorpay payment verification.",
+        category: "memberships",
+        order: 3,
+      },
+    ]),
+    Setting.insertMany([
+      { key: "platform.name", value: "Gloaro", group: "platform", isPublic: true },
+      { key: "platform.currency", value: "INR", group: "payments", isPublic: true },
+      { key: "support.email", value: "support@leastaction.in", group: "support", isPublic: true },
+    ]),
+  ]);
+
+  logger.info(`✅ Seeded ${banners.length} banners, ${faqs.length} FAQs, ${settings.length} settings`);
 };
 
 const seedCategories = async () => {
@@ -95,7 +162,7 @@ const seedCategories = async () => {
   ];
 
   const all = [...businessCategories, ...productCategories, ...serviceCategories];
-  const created = await Category.insertMany(all);
+  const created = await Category.create(all);
   logger.info(`✅ Seeded ${created.length} categories`);
   return created;
 };
@@ -196,17 +263,18 @@ const runSeed = async () => {
     await seedUsers();
     const categories = await seedCategories();
     await seedMembershipPlans();
+    await seedCMS();
 
     logger.info("✅ Database seeding completed successfully!");
     logger.info("\n📋 Test Credentials:");
     logger.info("  Super Admin: superadmin@vendordirectory.com / SuperAdmin@123");
     logger.info("  Admin: admin@vendordirectory.com / Admin@123");
     logger.info("  Vendor: vendor@vendordirectory.com / Vendor@123");
-    logger.info("  User: user@vendordirectory.com / User@123");
+    logger.info("  Customer: customer@vendordirectory.com / Customer@123");
 
     process.exit(0);
   } catch (err) {
-    logger.error("Seeding failed:", err.message);
+    logger.error("Seeding failed:", err);
     process.exit(1);
   }
 };

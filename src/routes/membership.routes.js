@@ -50,6 +50,7 @@ router.use(protect);
  *         description: Invalid plan or payment
  */
 router.post("/purchase", membershipController.purchaseMembership);
+router.post("/renew", membershipController.renewMembership);
 
 /**
  * @swagger

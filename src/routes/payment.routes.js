@@ -2,6 +2,13 @@ const express = require("express");
 const router = express.Router();
 const paymentController = require("../controllers/payment.controller");
 const { protect } = require("../middleware/auth");
+const { validate } = require("../middleware/validate");
+const {
+  createRazorpayOrderValidation,
+  verifyRazorpayValidation,
+  createStripeIntentValidation,
+  refundValidation,
+} = require("../validations/payment.validation");
 
 /**
  * @swagger
@@ -25,6 +32,8 @@ router.post(
   express.raw({ type: "application/json" }),
   paymentController.stripeWebhook
 );
+
+router.post("/webhook/razorpay", paymentController.razorpayWebhook);
 
 router.use(protect);
 
@@ -68,7 +77,7 @@ router.use(protect);
  *                         status:
  *                           type: string
  */
-router.post("/razorpay/order", paymentController.createRazorpayOrder);
+router.post("/razorpay/order", createRazorpayOrderValidation, validate, paymentController.createRazorpayOrder);
 
 /**
  * @swagger
@@ -101,7 +110,7 @@ router.post("/razorpay/order", paymentController.createRazorpayOrder);
  *       400:
  *         description: Payment verification failed
  */
-router.post("/razorpay/verify", paymentController.verifyRazorpayPayment);
+router.post("/razorpay/verify", verifyRazorpayValidation, validate, paymentController.verifyRazorpayPayment);
 
 /**
  * @swagger
@@ -135,7 +144,7 @@ router.post("/razorpay/verify", paymentController.verifyRazorpayPayment);
  *                     paymentIntent:
  *                       type: object
  */
-router.post("/stripe/intent", paymentController.createStripePaymentIntent);
+router.post("/stripe/intent", createStripeIntentValidation, validate, paymentController.createStripePaymentIntent);
 
 /**
  * @swagger
@@ -166,6 +175,9 @@ router.post("/stripe/intent", paymentController.createStripePaymentIntent);
  *         description: Payments fetched successfully
  */
 router.get("/", paymentController.getPayments);
+
+router.get("/transactions", paymentController.getTransactions);
+router.get("/invoices", paymentController.getInvoices);
 
 /**
  * @swagger
@@ -213,6 +225,6 @@ router.get("/:id", paymentController.getPaymentById);
  *       200:
  *         description: Refund processed successfully
  */
-router.post("/:id/refund", paymentController.requestRefund);
+router.post("/:id/refund", refundValidation, validate, paymentController.requestRefund);
 
 module.exports = router;

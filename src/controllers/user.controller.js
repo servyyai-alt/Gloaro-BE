@@ -4,6 +4,10 @@ const { AppError, asyncHandler } = require("../middleware/errorHandler");
 const { successResponse, paginatedResponse, getPagination } = require("../utils/response");
 const { deleteFromCloudinary } = require("../config/cloudinary");
 
+const compactObject = (data) => Object.fromEntries(
+  Object.entries(data).filter(([, value]) => value !== undefined)
+);
+
 exports.getUsers = asyncHandler(async (req, res) => {
   const { page, limit, skip } = getPagination(req.query);
   const { role, status, search } = req.query;
@@ -27,9 +31,15 @@ exports.getUserById = asyncHandler(async (req, res) => {
   successResponse(res, 200, "User retrieved", user);
 });
 
+exports.getProfile = asyncHandler(async (req, res) => {
+  const user = await User.findById(req.user._id).select("-password -refreshToken");
+  if (!user) throw new AppError("User not found", 404);
+  successResponse(res, 200, "Profile retrieved", user);
+});
+
 exports.updateUser = asyncHandler(async (req, res) => {
-  const { name, phone, address, preferences } = req.body;
-  const updateData = { name, phone, address, preferences };
+  const { name, phone, address, preferences, role, isActive } = req.body;
+  const updateData = compactObject({ name, phone, address, preferences, role, isActive });
   if (req.file) updateData.avatar = { url: req.file.path, publicId: req.file.filename };
 
   const user = await User.findByIdAndUpdate(req.params.id, updateData, { new: true, runValidators: true })
@@ -40,12 +50,12 @@ exports.updateUser = asyncHandler(async (req, res) => {
 
 exports.updateProfile = asyncHandler(async (req, res) => {
   const { name, phone, address, preferences } = req.body;
-  const updateData = { name, phone, address, preferences };
+  const updateData = compactObject({ name, phone, address, preferences });
   if (req.file) {
     if (req.user.avatar?.publicId) await deleteFromCloudinary(req.user.avatar.publicId).catch(() => {});
     updateData.avatar = { url: req.file.path, publicId: req.file.filename };
   }
-  const user = await User.findByIdAndUpdate(req.user._id, updateData, { new: true }).select("-password -refreshToken");
+  const user = await User.findByIdAndUpdate(req.user._id, updateData, { new: true, runValidators: true }).select("-password -refreshToken");
   successResponse(res, 200, "Profile updated", user);
 });
 

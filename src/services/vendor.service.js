@@ -1,6 +1,12 @@
 const Vendor = require("../models/Vendor");
 const User = require("../models/User");
 const Notification = require("../models/Notification");
+const Product = require("../models/Product");
+const Service = require("../models/Service");
+const Lead = require("../models/Lead");
+const Payment = require("../models/Payment");
+const Review = require("../models/Review");
+const { Membership } = require("../models/Membership");
 const { AppError } = require("../middleware/errorHandler");
 const { getPagination } = require("../utils/response");
 const { deleteFromCloudinary } = require("../config/cloudinary");
@@ -208,6 +214,150 @@ class VendorService {
       .populate("user", "name email phone");
     if (!vendor) throw new AppError("Vendor profile not found", 404);
     return vendor;
+  }
+
+  async getVendorDashboard(userId) {
+    const vendor = await Vendor.findOne({ user: userId }).populate("businessCategory", "name slug");
+    if (!vendor) throw new AppError("Vendor profile not found", 404);
+
+    const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+
+    const [
+      productsCount,
+      servicesCount,
+      pendingLeads,
+      unreadNotifications,
+      activeMembership,
+      recentLeads,
+      recentPayments,
+      reviewStats,
+      revenue,
+    ] = await Promise.all([
+      Product.countDocuments({ vendor: vendor._id, isActive: true }),
+      Service.countDocuments({ vendor: vendor._id, isActive: true }),
+      Lead.countDocuments({ vendor: vendor._id, status: { $in: ["new", "contacted", "qualified"] } }),
+      Notification.countDocuments({ recipient: userId, isRead: false }),
+      Membership.findOne({ vendor: vendor._id, status: "active" }).sort("-createdAt"),
+      Lead.find({ vendor: vendor._id }).sort("-createdAt").limit(5).select("name phone subject status priority createdAt"),
+      Payment.find({ vendor: vendor._id }).sort("-createdAt").limit(5).select("amount currency gateway status type paidAt createdAt"),
+      Review.aggregate([
+        { $match: { vendor: vendor._id, status: "approved" } },
+        { $group: { _id: "$vendor", avgRating: { $avg: "$rating" }, totalReviews: { $sum: 1 } } },
+      ]),
+      Payment.aggregate([
+        { $match: { vendor: vendor._id, status: "completed", createdAt: { $gte: startOfMonth } } },
+        { $group: { _id: "$vendor", total: { $sum: "$amount" } } },
+      ]),
+    ]);
+
+    return {
+      vendor,
+      stats: {
+        productsCount,
+        servicesCount,
+        pendingLeads,
+        unreadNotifications,
+        totalViews: vendor.stats.totalViews,
+        totalLeads: vendor.stats.totalLeads,
+        avgRating: reviewStats[0] ? Math.round(reviewStats[0].avgRating * 10) / 10 : vendor.stats.avgRating,
+        totalReviews: reviewStats[0]?.totalReviews || vendor.stats.totalReviews,
+        monthlyRevenue: revenue[0]?.total || 0,
+      },
+      membership: activeMembership || {
+        plan: vendor.membership.plan,
+        isActive: vendor.membership.isActive,
+        startDate: vendor.membership.startDate,
+        endDate: vendor.membership.endDate,
+      },
+      recentLeads,
+      recentPayments,
+    };
+  }
+
+  async getMyProducts(userId, query) {
+    const { page, limit, skip } = getPagination(query);
+    const vendor = await Vendor.findOne({ user: userId });
+    if (!vendor) throw new AppError("Vendor profile not found", 404);
+
+    const filter = { vendor: vendor._id };
+    if (query.status) filter.status = query.status;
+    if (query.search) filter.$text = { $search: query.search };
+
+    const [products, total] = await Promise.all([
+      Product.find(filter).populate("category", "name slug").sort(query.sortBy || "-createdAt").skip(skip).limit(limit),
+      Product.countDocuments(filter),
+    ]);
+
+    return { products, total, page, limit };
+  }
+
+  async getMyServices(userId, query) {
+    const { page, limit, skip } = getPagination(query);
+    const vendor = await Vendor.findOne({ user: userId });
+    if (!vendor) throw new AppError("Vendor profile not found", 404);
+
+    const filter = { vendor: vendor._id };
+    if (query.status) filter.status = query.status;
+    if (query.search) filter.$text = { $search: query.search };
+
+    const [services, total] = await Promise.all([
+      Service.find(filter).populate("category", "name slug").sort(query.sortBy || "-createdAt").skip(skip).limit(limit),
+      Service.countDocuments(filter),
+    ]);
+
+    return { services, total, page, limit };
+  }
+
+  async getMyReviews(userId, query) {
+    const { page, limit, skip } = getPagination(query);
+    const vendor = await Vendor.findOne({ user: userId });
+    if (!vendor) throw new AppError("Vendor profile not found", 404);
+
+    const filter = { vendor: vendor._id };
+    if (query.status) filter.status = query.status;
+    if (query.rating) filter.rating = Number(query.rating);
+
+    const [reviews, total] = await Promise.all([
+      Review.find(filter).populate("user", "name email avatar").sort(query.sortBy || "-createdAt").skip(skip).limit(limit),
+      Review.countDocuments(filter),
+    ]);
+
+    return { reviews, total, page, limit };
+  }
+
+  async getMyPayments(userId, query) {
+    const { page, limit, skip } = getPagination(query);
+    const vendor = await Vendor.findOne({ user: userId });
+    if (!vendor) throw new AppError("Vendor profile not found", 404);
+
+    const filter = { vendor: vendor._id };
+    if (query.status) filter.status = query.status;
+    if (query.type) filter.type = query.type;
+    if (query.gateway) filter.gateway = query.gateway;
+
+    const [payments, total] = await Promise.all([
+      Payment.find(filter).sort(query.sortBy || "-createdAt").skip(skip).limit(limit),
+      Payment.countDocuments(filter),
+    ]);
+
+    return { payments, total, page, limit };
+  }
+
+  async getMySubscriptions(userId, query) {
+    const { page, limit, skip } = getPagination(query);
+    const vendor = await Vendor.findOne({ user: userId });
+    if (!vendor) throw new AppError("Vendor profile not found", 404);
+
+    const filter = { vendor: vendor._id };
+    if (query.status) filter.status = query.status;
+    if (query.plan) filter.plan = query.plan;
+
+    const [memberships, total] = await Promise.all([
+      Membership.find(filter).populate("payment").sort("-createdAt").skip(skip).limit(limit),
+      Membership.countDocuments(filter),
+    ]);
+
+    return { memberships, total, page, limit };
   }
 }
 

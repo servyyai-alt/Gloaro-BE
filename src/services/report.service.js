@@ -5,6 +5,7 @@ const Lead = require("../models/Lead");
 const Product = require("../models/Product");
 const Service = require("../models/Service");
 const Event = require("../models/Event");
+const Category = require("../models/Category");
 const { Membership } = require("../models/Membership");
 const moment = require("moment");
 
@@ -144,6 +145,92 @@ class ReportService {
     ]);
 
     return { total, byStatus, upcoming };
+  }
+
+  async getAnalyticsSummary(query = {}) {
+    const { from, to } = this._getDateRange(query);
+    const dateFilter = { createdAt: { $gte: from, $lte: to } };
+
+    const [
+      monthlyRevenue,
+      monthlyUsers,
+      monthlyVendors,
+      membershipSales,
+      topVendors,
+      topCategories,
+      popularProducts,
+      popularServices,
+    ] = await Promise.all([
+      Payment.aggregate([
+        { $match: { status: "completed", ...dateFilter } },
+        {
+          $group: {
+            _id: { year: { $year: "$createdAt" }, month: { $month: "$createdAt" } },
+            revenue: { $sum: "$amount" },
+            transactions: { $sum: 1 },
+          },
+        },
+        { $sort: { "_id.year": 1, "_id.month": 1 } },
+      ]),
+      User.aggregate([
+        { $match: dateFilter },
+        { $group: { _id: { year: { $year: "$createdAt" }, month: { $month: "$createdAt" } }, users: { $sum: 1 } } },
+        { $sort: { "_id.year": 1, "_id.month": 1 } },
+      ]),
+      Vendor.aggregate([
+        { $match: dateFilter },
+        { $group: { _id: { year: { $year: "$createdAt" }, month: { $month: "$createdAt" } }, vendors: { $sum: 1 } } },
+        { $sort: { "_id.year": 1, "_id.month": 1 } },
+      ]),
+      Membership.aggregate([
+        { $match: dateFilter },
+        { $group: { _id: "$plan", sales: { $sum: 1 }, revenue: { $sum: "$price" } } },
+        { $sort: { revenue: -1 } },
+      ]),
+      Vendor.find({ status: "approved" })
+        .sort("-stats.totalLeads -stats.totalViews -stats.avgRating")
+        .limit(10)
+        .select("businessName slug logo stats membership.plan"),
+      Category.aggregate([
+        { $match: { isActive: true } },
+        {
+          $lookup: {
+            from: "vendors",
+            localField: "_id",
+            foreignField: "businessCategory",
+            as: "vendors",
+          },
+        },
+        {
+          $project: {
+            name: 1,
+            slug: 1,
+            vendorCount: { $size: "$vendors" },
+          },
+        },
+        { $sort: { vendorCount: -1 } },
+        { $limit: 10 },
+      ]),
+      Product.find({ status: "approved", isActive: true })
+        .sort("-stats.views -stats.orders -stats.avgRating")
+        .limit(10)
+        .select("title slug images pricing stats"),
+      Service.find({ status: "approved", isActive: true })
+        .sort("-stats.views -stats.inquiries -stats.avgRating")
+        .limit(10)
+        .select("title slug gallery pricing stats"),
+    ]);
+
+    return {
+      monthlyRevenue,
+      monthlyUsers,
+      monthlyVendors,
+      membershipSales,
+      topVendors,
+      topCategories,
+      popularProducts,
+      popularServices,
+    };
   }
 
   _getDateRange(query) {

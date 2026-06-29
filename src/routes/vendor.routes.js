@@ -128,6 +128,13 @@ router.get("/:id", vendorController.getVendorById);
 
 router.use(protect);
 
+router.get("/me/dashboard", authorize("vendor"), vendorController.getMyDashboard);
+router.get("/me/products", authorize("vendor"), vendorController.getMyProducts);
+router.get("/me/services", authorize("vendor"), vendorController.getMyServices);
+router.get("/me/reviews", authorize("vendor"), vendorController.getMyReviews);
+router.get("/me/payments", authorize("vendor"), vendorController.getMyPayments);
+router.get("/me/subscriptions", authorize("vendor"), vendorController.getMySubscriptions);
+
 /**
  * @swagger
  * /vendors:

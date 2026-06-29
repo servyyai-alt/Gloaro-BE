@@ -11,6 +11,9 @@ const createRazorpayOrderValidation = [
     .optional()
     .isIn(["INR", "USD", "EUR"])
     .withMessage("Unsupported currency"),
+  body("vendorId").optional().isMongoId().withMessage("Valid vendorId required"),
+  body("membershipId").optional().isMongoId().withMessage("Valid membershipId required"),
+  body("eventId").optional().isMongoId().withMessage("Valid eventId required"),
 ];
 
 const verifyRazorpayValidation = [

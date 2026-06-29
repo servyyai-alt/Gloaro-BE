@@ -28,6 +28,85 @@ const options = {
         description: "Production server",
       },
     ],
+    paths: {
+      "/customers/wishlist": {
+        get: { summary: "Get customer wishlist", tags: ["Customers"], security: [{ bearerAuth: [] }], responses: { 200: { description: "Wishlist retrieved" } } },
+        post: { summary: "Add item to wishlist", tags: ["Customers"], security: [{ bearerAuth: [] }], responses: { 200: { description: "Added to wishlist" } } },
+      },
+      "/customers/wishlist/{itemId}": {
+        delete: { summary: "Remove item from wishlist", tags: ["Customers"], security: [{ bearerAuth: [] }], responses: { 200: { description: "Removed from wishlist" } } },
+      },
+      "/customers/enquiries": {
+        get: { summary: "Get customer enquiries", tags: ["Customers"], security: [{ bearerAuth: [] }], responses: { 200: { description: "Customer enquiries retrieved" } } },
+      },
+      "/customers/events": {
+        get: { summary: "Get customer event registrations", tags: ["Customers"], security: [{ bearerAuth: [] }], responses: { 200: { description: "Event registrations retrieved" } } },
+      },
+      "/vendors/me/dashboard": {
+        get: { summary: "Get vendor dashboard", tags: ["Vendors"], security: [{ bearerAuth: [] }], responses: { 200: { description: "Vendor dashboard retrieved" } } },
+      },
+      "/vendors/me/products": {
+        get: { summary: "Get current vendor products", tags: ["Vendors"], security: [{ bearerAuth: [] }], responses: { 200: { description: "Vendor products retrieved" } } },
+      },
+      "/vendors/me/services": {
+        get: { summary: "Get current vendor services", tags: ["Vendors"], security: [{ bearerAuth: [] }], responses: { 200: { description: "Vendor services retrieved" } } },
+      },
+      "/vendors/me/reviews": {
+        get: { summary: "Get current vendor reviews", tags: ["Vendors"], security: [{ bearerAuth: [] }], responses: { 200: { description: "Vendor reviews retrieved" } } },
+      },
+      "/vendors/me/payments": {
+        get: { summary: "Get current vendor payments", tags: ["Vendors"], security: [{ bearerAuth: [] }], responses: { 200: { description: "Vendor payments retrieved" } } },
+      },
+      "/vendors/me/subscriptions": {
+        get: { summary: "Get current vendor subscription history", tags: ["Vendors"], security: [{ bearerAuth: [] }], responses: { 200: { description: "Vendor subscription history retrieved" } } },
+      },
+      "/payments/webhook/razorpay": {
+        post: { summary: "Razorpay webhook endpoint", tags: ["Payments"], security: [], responses: { 200: { description: "Webhook processed" } } },
+      },
+      "/payments/transactions": {
+        get: { summary: "Get transaction history", tags: ["Payments"], security: [{ bearerAuth: [] }], responses: { 200: { description: "Transactions retrieved" } } },
+      },
+      "/payments/invoices": {
+        get: { summary: "Get invoices", tags: ["Payments"], security: [{ bearerAuth: [] }], responses: { 200: { description: "Invoices retrieved" } } },
+      },
+      "/memberships/renew": {
+        post: { summary: "Renew vendor membership", tags: ["Memberships"], security: [{ bearerAuth: [] }], responses: { 201: { description: "Membership renewed" } } },
+      },
+      "/notifications/users/{userId}": {
+        post: { summary: "Send notification to user", tags: ["Notifications"], security: [{ bearerAuth: [] }], responses: { 201: { description: "Notification sent" } } },
+      },
+      "/notifications/vendors/{vendorId}": {
+        post: { summary: "Send notification to vendor", tags: ["Notifications"], security: [{ bearerAuth: [] }], responses: { 201: { description: "Vendor notification sent" } } },
+      },
+      "/reports/analytics": {
+        get: { summary: "Get analytics summary", tags: ["Reports"], security: [{ bearerAuth: [] }], responses: { 200: { description: "Analytics summary" } } },
+      },
+      "/support/admin/dashboard": {
+        get: { summary: "Get support dashboard", tags: ["Support"], security: [{ bearerAuth: [] }], responses: { 200: { description: "Support dashboard" } } },
+      },
+      "/admin/banners": {
+        get: { summary: "Get banners", tags: ["Admin"], security: [{ bearerAuth: [] }], responses: { 200: { description: "Banners retrieved" } } },
+        post: { summary: "Create banner", tags: ["Admin"], security: [{ bearerAuth: [] }], responses: { 201: { description: "Banner created" } } },
+      },
+      "/admin/banners/{id}": {
+        patch: { summary: "Update banner", tags: ["Admin"], security: [{ bearerAuth: [] }], responses: { 200: { description: "Banner updated" } } },
+        delete: { summary: "Delete banner", tags: ["Admin"], security: [{ bearerAuth: [] }], responses: { 200: { description: "Banner deleted" } } },
+      },
+      "/admin/faqs": {
+        get: { summary: "Get FAQs", tags: ["Admin"], security: [{ bearerAuth: [] }], responses: { 200: { description: "FAQs retrieved" } } },
+        post: { summary: "Create FAQ", tags: ["Admin"], security: [{ bearerAuth: [] }], responses: { 201: { description: "FAQ created" } } },
+      },
+      "/admin/faqs/{id}": {
+        patch: { summary: "Update FAQ", tags: ["Admin"], security: [{ bearerAuth: [] }], responses: { 200: { description: "FAQ updated" } } },
+        delete: { summary: "Delete FAQ", tags: ["Admin"], security: [{ bearerAuth: [] }], responses: { 200: { description: "FAQ deleted" } } },
+      },
+      "/admin/settings": {
+        get: { summary: "Get settings", tags: ["Admin"], security: [{ bearerAuth: [] }], responses: { 200: { description: "Settings retrieved" } } },
+      },
+      "/admin/settings/{key}": {
+        put: { summary: "Upsert setting", tags: ["Admin"], security: [{ bearerAuth: [] }], responses: { 200: { description: "Setting saved" } } },
+      },
+    },
     components: {
       securitySchemes: {
         bearerAuth: {
@@ -83,7 +162,7 @@ const options = {
             name: { type: "string", example: "John Doe" },
             email: { type: "string", format: "email", example: "john@example.com" },
             phone: { type: "string", example: "+919876543210" },
-            role: { type: "string", enum: ["superadmin", "admin", "vendor", "user"], example: "user" },
+            role: { type: "string", enum: ["superadmin", "admin", "vendor", "customer", "user"], example: "customer" },
             avatar: {
               type: "object",
               properties: {
@@ -129,7 +208,7 @@ const options = {
             email: { type: "string", format: "email", example: "john@example.com" },
             password: { type: "string", format: "password", minLength: 8, example: "password123" },
             phone: { type: "string", example: "+919876543210" },
-            role: { type: "string", enum: ["user", "vendor"], example: "user" },
+            role: { type: "string", enum: ["customer", "vendor", "user"], example: "customer" },
             referralCode: { type: "string", example: "ABC123" },
           },
         },

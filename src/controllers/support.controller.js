@@ -89,6 +89,31 @@ exports.getAllTickets = asyncHandler(async (req, res) => {
   paginatedResponse(res, tickets, page, limit, total);
 });
 
+exports.getSupportDashboard = asyncHandler(async (req, res) => {
+  const now = new Date();
+  const [byStatus, byPriority, byCategory, overdue, unassigned, recentTickets] = await Promise.all([
+    SupportTicket.aggregate([{ $group: { _id: "$status", count: { $sum: 1 } } }]),
+    SupportTicket.aggregate([{ $group: { _id: "$priority", count: { $sum: 1 } } }]),
+    SupportTicket.aggregate([{ $group: { _id: "$category", count: { $sum: 1 } } }]),
+    SupportTicket.countDocuments({ status: { $nin: ["resolved", "closed"] }, slaDeadline: { $lt: now } }),
+    SupportTicket.countDocuments({ assignedTo: { $exists: false }, status: { $nin: ["resolved", "closed"] } }),
+    SupportTicket.find()
+      .populate("user", "name email")
+      .populate("assignedTo", "name email")
+      .sort("-createdAt")
+      .limit(10),
+  ]);
+
+  successResponse(res, 200, "Support dashboard", {
+    byStatus,
+    byPriority,
+    byCategory,
+    overdue,
+    unassigned,
+    recentTickets,
+  });
+});
+
 exports.assignTicket = asyncHandler(async (req, res) => {
   const ticket = await SupportTicket.findByIdAndUpdate(req.params.id, {
     assignedTo: req.body.assignedTo, status: "in_progress",

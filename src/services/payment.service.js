@@ -16,13 +16,21 @@ const razorpay = new Razorpay({
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 class PaymentService {
+  async ensureInvoiceNumber(payment) {
+    if (!payment || payment.invoiceNumber || payment.status !== "completed") return payment;
+    const count = await Payment.countDocuments({ invoiceNumber: { $exists: true, $ne: null } });
+    payment.invoiceNumber = `INV-${new Date().getFullYear()}-${String(count + 1).padStart(6, "0")}`;
+    await payment.save({ validateBeforeSave: false });
+    return payment;
+  }
+
   // ========== RAZORPAY ==========
-  async createRazorpayOrder(userId, vendorId, type, amount, currency = "INR", description) {
+  async createRazorpayOrder(userId, vendorId, type, amount, currency = "INR", description, metadata = {}) {
     const options = {
       amount: Math.round(amount * 100), // paise
       currency,
       receipt: `rcpt_${Date.now()}`,
-      notes: { userId: userId.toString(), vendorId: vendorId?.toString(), type },
+      notes: { userId: userId.toString(), vendorId: vendorId?.toString(), type, ...metadata },
     };
 
     const order = await razorpay.orders.create(options);
@@ -37,7 +45,12 @@ class PaymentService {
       razorpay: { orderId: order.id },
       description,
       status: "pending",
+      metadata,
     });
+
+    if (metadata.membershipId) {
+      await Membership.findByIdAndUpdate(metadata.membershipId, { payment: payment._id });
+    }
 
     return { order, payment, keyId: process.env.RAZORPAY_KEY_ID };
   }
@@ -67,7 +80,48 @@ class PaymentService {
     );
 
     await this.postPaymentSuccess(payment);
+    await this.ensureInvoiceNumber(payment);
     return payment;
+  }
+
+  async handleRazorpayWebhook(payload, signature) {
+    const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
+    if (secret && signature) {
+      const expectedSignature = crypto
+        .createHmac("sha256", secret)
+        .update(JSON.stringify(payload))
+        .digest("hex");
+      if (expectedSignature !== signature) throw new AppError("Invalid Razorpay webhook signature", 400);
+    }
+
+    const event = payload.event;
+    const entity = payload.payload?.payment?.entity;
+    if (!entity) return { received: true };
+
+    if (event === "payment.captured" || event === "payment.authorized") {
+      const payment = await Payment.findOneAndUpdate(
+        { "razorpay.orderId": entity.order_id },
+        {
+          status: "completed",
+          paidAt: new Date(),
+          "razorpay.paymentId": entity.id,
+        },
+        { new: true }
+      );
+      if (payment) {
+        await this.ensureInvoiceNumber(payment);
+        await this.postPaymentSuccess(payment);
+      }
+    }
+
+    if (event === "payment.failed") {
+      await Payment.findOneAndUpdate(
+        { "razorpay.orderId": entity.order_id },
+        { status: "failed", failureReason: entity.error_description || "Razorpay payment failed" }
+      );
+    }
+
+    return { received: true };
   }
 
   // ========== STRIPE ==========
@@ -109,7 +163,10 @@ class PaymentService {
           { status: "completed", paidAt: new Date() },
           { new: true }
         );
-        if (payment) await this.postPaymentSuccess(payment);
+        if (payment) {
+          await this.ensureInvoiceNumber(payment);
+          await this.postPaymentSuccess(payment);
+        }
         break;
       }
       case "payment_intent.payment_failed": {
@@ -214,6 +271,13 @@ class PaymentService {
       throw new AppError("Not authorized", 403);
     }
     return payment;
+  }
+
+  async getInvoices(query, userId, role) {
+    const invoiceQuery = { ...query, status: "completed" };
+    const result = await this.getPayments(invoiceQuery, userId, role);
+    result.payments = result.payments.filter((payment) => payment.invoiceNumber);
+    return result;
   }
 }
 

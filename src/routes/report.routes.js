@@ -29,6 +29,7 @@ router.use(protect, authorize("admin", "superadmin"));
  *         description: Not authorized
  */
 router.get("/dashboard", reportController.getDashboardSummary);
+router.get("/analytics", reportController.getAnalyticsSummary);
 
 /**
  * @swagger

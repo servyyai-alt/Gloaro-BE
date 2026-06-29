@@ -2,6 +2,8 @@ const express = require("express");
 const router = express.Router();
 const notificationController = require("../controllers/notification.controller");
 const { protect, authorize } = require("../middleware/auth");
+const { body } = require("express-validator");
+const { validate } = require("../middleware/validate");
 
 router.use(protect);
 
@@ -119,6 +121,33 @@ router.delete("/:id", notificationController.deleteNotification);
  *       403:
  *         description: Not authorized
  */
-router.post("/broadcast", authorize("admin", "superadmin"), notificationController.sendBroadcast);
+const notificationBodyValidation = [
+  body("title").trim().notEmpty().withMessage("Title is required"),
+  body("message").trim().notEmpty().withMessage("Message is required"),
+  body("type").optional().isString().trim(),
+  body("priority").optional().isIn(["low", "normal", "high"]).withMessage("Invalid priority"),
+];
+
+router.post(
+  "/broadcast",
+  authorize("admin", "superadmin"),
+  notificationBodyValidation,
+  validate,
+  notificationController.sendBroadcast
+);
+router.post(
+  "/users/:userId",
+  authorize("admin", "superadmin"),
+  notificationBodyValidation,
+  validate,
+  notificationController.sendUserNotification
+);
+router.post(
+  "/vendors/:vendorId",
+  authorize("admin", "superadmin"),
+  notificationBodyValidation,
+  validate,
+  notificationController.sendVendorNotification
+);
 
 module.exports = router;

@@ -8,6 +8,10 @@ exports.createProduct = asyncHandler(async (req, res) => {
   if (!vendor) throw new AppError("Vendor profile not found", 404);
   if (vendor.status !== "approved") throw new AppError("Vendor account not approved", 403);
 
+  delete req.body.status;
+  delete req.body.isFeatured;
+  delete req.body.approvedBy;
+  delete req.body.approvedAt;
   const images = req.files ? req.files.map((f, i) => ({ url: f.path, publicId: f.filename, isMain: i === 0 })) : [];
   const product = await Product.create({ ...req.body, vendor: vendor._id, images });
   await Vendor.findByIdAndUpdate(vendor._id, { $inc: { "stats.totalProducts": 1 } });
@@ -53,6 +57,13 @@ exports.updateProduct = asyncHandler(async (req, res) => {
   if (!product) throw new AppError("Product not found", 404);
   const isOwner = product.vendor.user.toString() === req.user._id.toString();
   if (!isOwner && !["admin", "superadmin"].includes(req.user.role)) throw new AppError("Not authorized", 403);
+  if (isOwner && !["admin", "superadmin"].includes(req.user.role)) {
+    delete req.body.status;
+    delete req.body.isFeatured;
+    delete req.body.approvedBy;
+    delete req.body.approvedAt;
+    delete req.body.rejectedReason;
+  }
   if (req.files?.length) {
     req.body.images = req.files.map((f, i) => ({ url: f.path, publicId: f.filename, isMain: i === 0 }));
   }
@@ -78,6 +89,7 @@ exports.deleteProduct = asyncHandler(async (req, res) => {
   const isOwner = product.vendor.user.toString() === req.user._id.toString();
   if (!isOwner && !["admin", "superadmin"].includes(req.user.role)) throw new AppError("Not authorized", 403);
   await product.deleteOne();
+  await Vendor.findByIdAndUpdate(product.vendor._id, { $inc: { "stats.totalProducts": -1 } });
   successResponse(res, 200, "Product deleted");
 });
 

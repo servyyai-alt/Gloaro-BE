@@ -7,7 +7,7 @@ const { setCache, deleteCache } = require("../config/redis");
 
 class AuthService {
   async register(data) {
-    const { name, email, phone, password, role = "user", referralCode } = data;
+    const { name, email, phone, password, role = "customer", referralCode } = data;
 
     const existingUser = await User.findOne({ email });
     if (existingUser) throw new AppError("Email already registered", 409);
@@ -22,7 +22,7 @@ class AuthService {
       email,
       phone,
       password,
-      role: ["vendor", "user"].includes(role) ? role : "user",
+      role: ["vendor", "customer", "user"].includes(role) ? (role === "user" ? "customer" : role) : "customer",
       referredBy: referrer?._id,
     });
 

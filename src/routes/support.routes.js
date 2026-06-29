@@ -3,6 +3,8 @@ const router = express.Router();
 const supportController = require("../controllers/support.controller");
 const { protect, authorize } = require("../middleware/auth");
 const { uploadMultiple } = require("../config/cloudinary");
+const { body } = require("express-validator");
+const { validate } = require("../middleware/validate");
 
 router.use(protect);
 
@@ -32,7 +34,18 @@ router.use(protect);
  *       422:
  *         description: Validation error
  */
-router.post("/", uploadMultiple("attachments", "support", 5), supportController.createTicket);
+router.post(
+  "/",
+  uploadMultiple("attachments", "support", 5),
+  [
+    body("subject").trim().notEmpty().withMessage("Subject is required"),
+    body("description").trim().notEmpty().withMessage("Description is required"),
+    body("category").optional().isIn(["billing", "technical", "account", "vendor", "general", "other"]).withMessage("Invalid category"),
+    body("priority").optional().isIn(["low", "medium", "high", "critical"]).withMessage("Invalid priority"),
+  ],
+  validate,
+  supportController.createTicket
+);
 
 /**
  * @swagger
@@ -57,6 +70,8 @@ router.post("/", uploadMultiple("attachments", "support", 5), supportController.
  *         description: Support tickets fetched successfully
  */
 router.get("/my", supportController.getMyTickets);
+
+router.get("/admin/dashboard", authorize("admin", "superadmin"), supportController.getSupportDashboard);
 
 /**
  * @swagger
@@ -112,7 +127,16 @@ router.get("/:id", supportController.getTicketById);
  *       200:
  *         description: Reply added successfully
  */
-router.post("/:id/reply", uploadMultiple("attachments", "support", 3), supportController.replyToTicket);
+router.post(
+  "/:id/reply",
+  uploadMultiple("attachments", "support", 3),
+  [
+    body("message").trim().notEmpty().withMessage("Message is required"),
+    body("isInternal").optional().isBoolean().withMessage("isInternal must be boolean"),
+  ],
+  validate,
+  supportController.replyToTicket
+);
 
 /**
  * @swagger
@@ -131,7 +155,15 @@ router.post("/:id/reply", uploadMultiple("attachments", "support", 3), supportCo
  *       200:
  *         description: Ticket closed successfully
  */
-router.patch("/:id/close", supportController.closeTicket);
+router.patch(
+  "/:id/close",
+  [
+    body("satisfactionRating").optional().isInt({ min: 1, max: 5 }).withMessage("Satisfaction rating must be 1 to 5"),
+    body("satisfactionComment").optional().isString().trim(),
+  ],
+  validate,
+  supportController.closeTicket
+);
 
 /**
  * @swagger
@@ -195,6 +227,12 @@ router.get("/", authorize("admin", "superadmin"), supportController.getAllTicket
  *       403:
  *         description: Not authorized
  */
-router.patch("/:id/assign", authorize("admin", "superadmin"), supportController.assignTicket);
+router.patch(
+  "/:id/assign",
+  authorize("admin", "superadmin"),
+  [body("assignedTo").isMongoId().withMessage("Valid assignedTo user ID required")],
+  validate,
+  supportController.assignTicket
+);
 
 module.exports = router;

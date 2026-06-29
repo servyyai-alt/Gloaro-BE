@@ -21,6 +21,7 @@ const serviceRoutes = require("./routes/service.routes");
 const productRoutes = require("./routes/product.routes");
 const leadRoutes = require("./routes/lead.routes");
 const membershipRoutes = require("./routes/membership.routes");
+const membershipApplicationRoutes = require("./routes/membershipApplication.routes");
 const paymentRoutes = require("./routes/payment.routes");
 const reviewRoutes = require("./routes/review.routes");
 const eventRoutes = require("./routes/event.routes");
@@ -29,9 +30,18 @@ const notificationRoutes = require("./routes/notification.routes");
 const reportRoutes = require("./routes/report.routes");
 const supportRoutes = require("./routes/support.routes");
 const directoryRoutes = require("./routes/directory.routes");
+const nearbyRoutes = require("./routes/nearby.routes");
+const customerRoutes = require("./routes/customer.routes");
 const adminRoutes = require("./routes/admin.routes");
 
 const app = express();
+const allowedOrigins = [
+  process.env.CLIENT_URL,
+  "http://localhost:3000",
+  "http://localhost:5173",
+  "http://127.0.0.1:3000",
+  "http://127.0.0.1:5173",
+].filter(Boolean);
 
 // Trust proxy
 app.set("trust proxy", 1);
@@ -42,7 +52,12 @@ app.use(helmet());
 // CORS
 app.use(
   cors({
-    origin: process.env.CLIENT_URL || "http://localhost:3000",
+    origin(origin, callback) {
+      if (!origin || allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      return callback(new Error("Not allowed by CORS"));
+    },
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
@@ -103,6 +118,7 @@ app.use("/api/v1/services", serviceRoutes);
 app.use("/api/v1/products", productRoutes);
 app.use("/api/v1/leads", leadRoutes);
 app.use("/api/v1/memberships", membershipRoutes);
+app.use("/api/v1/membership-applications", membershipApplicationRoutes);
 app.use("/api/v1/payments", paymentRoutes);
 app.use("/api/v1/reviews", reviewRoutes);
 app.use("/api/v1/events", eventRoutes);
@@ -111,6 +127,8 @@ app.use("/api/v1/notifications", notificationRoutes);
 app.use("/api/v1/reports", reportRoutes);
 app.use("/api/v1/support", supportRoutes);
 app.use("/api/v1/directory", directoryRoutes);
+app.use("/api/v1/nearby", nearbyRoutes);
+app.use("/api/v1/customers", customerRoutes);
 app.use("/api/v1/admin", adminRoutes);
 
 // Error handlers

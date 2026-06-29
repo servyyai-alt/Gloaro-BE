@@ -26,8 +26,15 @@ const protect = asyncHandler(async (req, res, next) => {
   next();
 });
 
+const roleMatches = (allowedRole, actualRole) => {
+  if (allowedRole === actualRole) return true;
+  if (allowedRole === "customer" && actualRole === "user") return true;
+  if (allowedRole === "user" && actualRole === "customer") return true;
+  return false;
+};
+
 const authorize = (...roles) => (req, res, next) => {
-  if (!roles.includes(req.user.role)) {
+  if (!roles.some((role) => roleMatches(role, req.user.role))) {
     throw new AppError(`Role '${req.user.role}' is not authorized to access this resource`, 403);
   }
   next();
@@ -54,4 +61,4 @@ const optionalAuth = asyncHandler(async (req, res, next) => {
   next();
 });
 
-module.exports = { protect, authorize, optionalAuth };
+module.exports = { protect, authorize, optionalAuth, roleMatches };

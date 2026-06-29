@@ -30,7 +30,7 @@ router.use(protect);
  *       401:
  *         description: Not authenticated
  */
-router.get("/profile", userController.updateProfile);
+router.get("/profile", userController.getProfile);
 
 /**
  * @swagger
@@ -149,7 +149,7 @@ router.get("/", authorize("admin", "superadmin"), userController.getUsers);
  *       404:
  *         description: User not found
  */
-router.get("/:id", userController.getUserById);
+router.get("/:id", authorize("admin", "superadmin"), userController.getUserById);
 
 /**
  * @swagger
@@ -184,7 +184,7 @@ router.get("/:id", userController.getUserById);
  *       403:
  *         description: Not authorized
  */
-router.patch("/:id", uploadSingle("avatar", "avatars"), userController.updateUser);
+router.patch("/:id", authorize("admin", "superadmin"), uploadSingle("avatar", "avatars"), userController.updateUser);
 
 /**
  * @swagger
@@ -205,7 +205,7 @@ router.patch("/:id", uploadSingle("avatar", "avatars"), userController.updateUse
  *       403:
  *         description: Not authorized
  */
-router.delete("/:id", userController.deleteUser);
+router.delete("/:id", authorize("admin", "superadmin"), userController.deleteUser);
 
 /**
  * @swagger
@@ -224,7 +224,7 @@ router.delete("/:id", userController.deleteUser);
  *       200:
  *         description: User suspended successfully
  */
-router.patch("/:id/suspend", userController.suspendUser);
+router.patch("/:id/suspend", authorize("admin", "superadmin"), userController.suspendUser);
 
 /**
  * @swagger
@@ -243,7 +243,7 @@ router.patch("/:id/suspend", userController.suspendUser);
  *       200:
  *         description: User unsuspended successfully
  */
-router.patch("/:id/unsuspend", userController.unsuspendUser);
+router.patch("/:id/unsuspend", authorize("admin", "superadmin"), userController.unsuspendUser);
 
 /**
  * @swagger
@@ -262,7 +262,7 @@ router.patch("/:id/unsuspend", userController.unsuspendUser);
  *       200:
  *         description: User blocked successfully
  */
-router.patch("/:id/block", userController.blockUser);
+router.patch("/:id/block", authorize("admin", "superadmin"), userController.blockUser);
 
 /**
  * @swagger
@@ -281,7 +281,7 @@ router.patch("/:id/block", userController.blockUser);
  *       200:
  *         description: User unblocked successfully
  */
-router.patch("/:id/unblock", userController.unblockUser);
+router.patch("/:id/unblock", authorize("admin", "superadmin"), userController.unblockUser);
 
 /**
  * @swagger
@@ -300,6 +300,6 @@ router.patch("/:id/unblock", userController.unblockUser);
  *       200:
  *         description: Activity logs fetched successfully
  */
-router.get("/:id/activity", userController.getUserActivityLogs);
+router.get("/:id/activity", authorize("admin", "superadmin"), userController.getUserActivityLogs);
 
 module.exports = router;

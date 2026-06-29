@@ -23,7 +23,7 @@
           "request": {
             "method": "POST", "url": "{{baseUrl}}/auth/register",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{\n  \"name\": \"John Doe\",\n  \"email\": \"john@example.com\",\n  \"password\": \"Password@123\",\n  \"phone\": \"9876543210\",\n  \"role\": \"user\"\n}" }
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"John Doe\",\n  \"email\": \"john@example.com\",\n  \"password\": \"Password@123\",\n  \"phone\": \"9876543210\",\n  \"role\": \"customer\"\n}" }
           }
         },
         {
@@ -67,11 +67,27 @@
       ]
     },
     {
+      "name": "Customers",
+      "item": [
+        { "name": "Get Wishlist", "request": { "method": "GET", "url": "{{baseUrl}}/customers/wishlist?page=1&limit=10" } },
+        { "name": "Add Vendor To Wishlist", "request": { "method": "POST", "url": "{{baseUrl}}/customers/wishlist", "body": { "mode": "raw", "raw": "{\n  \"itemType\": \"vendor\",\n  \"itemId\": \"VENDOR_ID\",\n  \"notes\": \"Preferred supplier\"\n}", "options": { "raw": { "language": "json" } } } } },
+        { "name": "Remove From Wishlist", "request": { "method": "DELETE", "url": "{{baseUrl}}/customers/wishlist/VENDOR_ID?itemType=vendor" } },
+        { "name": "My Enquiries", "request": { "method": "GET", "url": "{{baseUrl}}/customers/enquiries?page=1&limit=10" } },
+        { "name": "My Event Registrations", "request": { "method": "GET", "url": "{{baseUrl}}/customers/events?page=1&limit=10" } }
+      ]
+    },
+    {
       "name": "Vendors",
       "item": [
         { "name": "Get All Vendors", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/vendors?page=1&limit=10&status=approved", "query": [{"key":"page","value":"1"},{"key":"limit","value":"10"},{"key":"status","value":"approved"}] } } },
         { "name": "Create Vendor Profile", "request": { "method": "POST", "url": "{{baseUrl}}/vendors", "body": { "mode": "formdata", "formdata": [{"key":"businessName","value":"Tech Solutions Pvt Ltd","type":"text"},{"key":"ownerName","value":"Rajesh Kumar","type":"text"},{"key":"email","value":"tech@example.com","type":"text"},{"key":"phone","value":"9876543210","type":"text"},{"key":"description","value":"We provide cutting-edge technology solutions","type":"text"},{"key":"businessCategory","value":"CATEGORY_ID_HERE","type":"text"},{"key":"address[street]","value":"123 MG Road","type":"text"},{"key":"address[city]","value":"Bangalore","type":"text"},{"key":"address[state]","value":"Karnataka","type":"text"},{"key":"address[pincode]","value":"560001","type":"text"}] } } },
         { "name": "Get My Vendor Profile", "request": { "method": "GET", "url": "{{baseUrl}}/vendors/me/profile" } },
+        { "name": "Vendor Dashboard", "request": { "method": "GET", "url": "{{baseUrl}}/vendors/me/dashboard" } },
+        { "name": "My Products", "request": { "method": "GET", "url": "{{baseUrl}}/vendors/me/products?page=1&limit=10" } },
+        { "name": "My Services", "request": { "method": "GET", "url": "{{baseUrl}}/vendors/me/services?page=1&limit=10" } },
+        { "name": "My Reviews", "request": { "method": "GET", "url": "{{baseUrl}}/vendors/me/reviews?page=1&limit=10" } },
+        { "name": "My Payments", "request": { "method": "GET", "url": "{{baseUrl}}/vendors/me/payments?page=1&limit=10" } },
+        { "name": "My Subscriptions", "request": { "method": "GET", "url": "{{baseUrl}}/vendors/me/subscriptions?page=1&limit=10" } },
         { "name": "Get Vendor By Slug", "request": { "method": "GET", "url": "{{baseUrl}}/vendors/slug/:slug" } },
         { "name": "Approve/Reject Vendor", "request": { "method": "PATCH", "url": "{{baseUrl}}/vendors/:id/approve", "body": { "mode": "raw", "raw": "{\n  \"action\": \"approve\"\n}", "options": { "raw": { "language": "json" } } } } },
         { "name": "Get Nearby Vendors", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/vendors/nearby?lat=12.9716&lng=77.5946&radius=10", "query": [{"key":"lat","value":"12.9716"},{"key":"lng","value":"77.5946"},{"key":"radius","value":"10"}] } } }
@@ -120,9 +136,11 @@
     {
       "name": "Payments",
       "item": [
-        { "name": "Create Razorpay Order", "request": { "method": "POST", "url": "{{baseUrl}}/payments/razorpay/order", "body": { "mode": "raw", "raw": "{\n  \"vendorId\": \"VENDOR_ID\",\n  \"type\": \"membership\",\n  \"amount\": 2499,\n  \"currency\": \"INR\",\n  \"description\": \"Gold Membership - Monthly\"\n}", "options": { "raw": { "language": "json" } } } } },
+        { "name": "Create Razorpay Order", "request": { "method": "POST", "url": "{{baseUrl}}/payments/razorpay/order", "body": { "mode": "raw", "raw": "{\n  \"vendorId\": \"VENDOR_ID\",\n  \"membershipId\": \"MEMBERSHIP_ID\",\n  \"type\": \"membership\",\n  \"amount\": 2499,\n  \"currency\": \"INR\",\n  \"description\": \"Gold Membership - Monthly\"\n}", "options": { "raw": { "language": "json" } } } } },
         { "name": "Verify Razorpay Payment", "request": { "method": "POST", "url": "{{baseUrl}}/payments/razorpay/verify", "body": { "mode": "raw", "raw": "{\n  \"paymentId\": \"PAYMENT_ID\",\n  \"razorpay_order_id\": \"order_xxx\",\n  \"razorpay_payment_id\": \"pay_xxx\",\n  \"razorpay_signature\": \"signature_xxx\"\n}", "options": { "raw": { "language": "json" } } } } },
         { "name": "Get Payment History", "request": { "method": "GET", "url": "{{baseUrl}}/payments?page=1&limit=10" } },
+        { "name": "Get Transactions", "request": { "method": "GET", "url": "{{baseUrl}}/payments/transactions?page=1&limit=10" } },
+        { "name": "Get Invoices", "request": { "method": "GET", "url": "{{baseUrl}}/payments/invoices?page=1&limit=10" } },
         { "name": "Request Refund", "request": { "method": "POST", "url": "{{baseUrl}}/payments/:id/refund", "body": { "mode": "raw", "raw": "{\n  \"reason\": \"Service not delivered as promised\"\n}", "options": { "raw": { "language": "json" } } } } }
       ]
     },
@@ -158,7 +176,9 @@
         { "name": "Get Notifications", "request": { "method": "GET", "url": "{{baseUrl}}/notifications?page=1&limit=20" } },
         { "name": "Get Unread Count", "request": { "method": "GET", "url": "{{baseUrl}}/notifications/unread-count" } },
         { "name": "Mark All As Read", "request": { "method": "PATCH", "url": "{{baseUrl}}/notifications/read-all" } },
-        { "name": "Send Broadcast (Admin)", "request": { "method": "POST", "url": "{{baseUrl}}/notifications/broadcast", "body": { "mode": "raw", "raw": "{\n  \"title\": \"Platform Update\",\n  \"message\": \"We have added exciting new features!\",\n  \"type\": \"announcement\"\n}", "options": { "raw": { "language": "json" } } } } }
+        { "name": "Send Broadcast (Admin)", "request": { "method": "POST", "url": "{{baseUrl}}/notifications/broadcast", "body": { "mode": "raw", "raw": "{\n  \"title\": \"Platform Update\",\n  \"message\": \"We have added exciting new features!\",\n  \"type\": \"announcement\"\n}", "options": { "raw": { "language": "json" } } } } },
+        { "name": "Send User Notification (Admin)", "request": { "method": "POST", "url": "{{baseUrl}}/notifications/users/USER_ID", "body": { "mode": "raw", "raw": "{\n  \"title\": \"Account Notice\",\n  \"message\": \"Your profile was reviewed.\",\n  \"type\": \"announcement\"\n}", "options": { "raw": { "language": "json" } } } } },
+        { "name": "Send Vendor Notification (Admin)", "request": { "method": "POST", "url": "{{baseUrl}}/notifications/vendors/VENDOR_ID", "body": { "mode": "raw", "raw": "{\n  \"title\": \"Vendor Notice\",\n  \"message\": \"Your listing needs attention.\",\n  \"type\": \"announcement\"\n}", "options": { "raw": { "language": "json" } } } } }
       ]
     },
     {
@@ -166,6 +186,7 @@
       "item": [
         { "name": "Create Ticket", "request": { "method": "POST", "url": "{{baseUrl}}/support", "body": { "mode": "raw", "raw": "{\n  \"subject\": \"Unable to update vendor profile\",\n  \"description\": \"When I try to update my profile, I get an error message\",\n  \"category\": \"technical\",\n  \"priority\": \"medium\"\n}", "options": { "raw": { "language": "json" } } } } },
         { "name": "Get My Tickets", "request": { "method": "GET", "url": "{{baseUrl}}/support/my" } },
+        { "name": "Support Dashboard (Admin)", "request": { "method": "GET", "url": "{{baseUrl}}/support/admin/dashboard" } },
         { "name": "Reply To Ticket", "request": { "method": "POST", "url": "{{baseUrl}}/support/:id/reply", "body": { "mode": "raw", "raw": "{\n  \"message\": \"Please check the attached screenshot\"\n}", "options": { "raw": { "language": "json" } } } } }
       ]
     },
@@ -173,6 +194,7 @@
       "name": "Reports (Admin)",
       "item": [
         { "name": "Dashboard Summary", "request": { "method": "GET", "url": "{{baseUrl}}/reports/dashboard" } },
+        { "name": "Analytics Summary", "request": { "method": "GET", "url": "{{baseUrl}}/reports/analytics?from=2025-01-01" } },
         { "name": "User Report", "request": { "method": "GET", "url": "{{baseUrl}}/reports/users?from=2025-01-01&to=2025-12-31" } },
         { "name": "Revenue Report", "request": { "method": "GET", "url": "{{baseUrl}}/reports/revenue?from=2025-01-01" } },
         { "name": "Vendor Report", "request": { "method": "GET", "url": "{{baseUrl}}/reports/vendors" } },
@@ -193,7 +215,13 @@
         { "name": "Dashboard", "request": { "method": "GET", "url": "{{baseUrl}}/admin/dashboard" } },
         { "name": "Pending Approvals", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/admin/pending-approvals?type=vendor", "query": [{"key":"type","value":"vendor"}] } } },
         { "name": "Audit Logs", "request": { "method": "GET", "url": "{{baseUrl}}/admin/audit-logs?page=1&limit=20" } },
-        { "name": "Create Admin", "request": { "method": "POST", "url": "{{baseUrl}}/admin/create-admin", "body": { "mode": "raw", "raw": "{\n  \"name\": \"New Admin\",\n  \"email\": \"newadmin@vendordirectory.com\",\n  \"password\": \"Admin@123\",\n  \"phone\": \"9000000000\"\n}", "options": { "raw": { "language": "json" } } } } }
+        { "name": "Create Admin", "request": { "method": "POST", "url": "{{baseUrl}}/admin/create-admin", "body": { "mode": "raw", "raw": "{\n  \"name\": \"New Admin\",\n  \"email\": \"newadmin@vendordirectory.com\",\n  \"password\": \"Admin@123\",\n  \"phone\": \"9000000000\"\n}", "options": { "raw": { "language": "json" } } } } },
+        { "name": "Get Banners", "request": { "method": "GET", "url": "{{baseUrl}}/admin/banners" } },
+        { "name": "Create Banner", "request": { "method": "POST", "url": "{{baseUrl}}/admin/banners", "body": { "mode": "raw", "raw": "{\n  \"title\": \"Grow with Gloaro\",\n  \"subtitle\": \"Connect with verified businesses\",\n  \"placement\": \"home\",\n  \"order\": 1,\n  \"isActive\": true\n}", "options": { "raw": { "language": "json" } } } } },
+        { "name": "Get FAQs", "request": { "method": "GET", "url": "{{baseUrl}}/admin/faqs" } },
+        { "name": "Create FAQ", "request": { "method": "POST", "url": "{{baseUrl}}/admin/faqs", "body": { "mode": "raw", "raw": "{\n  \"question\": \"How do I become a vendor?\",\n  \"answer\": \"Create an account and submit your business profile.\",\n  \"category\": \"vendors\"\n}", "options": { "raw": { "language": "json" } } } } },
+        { "name": "Get Settings", "request": { "method": "GET", "url": "{{baseUrl}}/admin/settings" } },
+        { "name": "Upsert Setting", "request": { "method": "PUT", "url": "{{baseUrl}}/admin/settings/platform.name", "body": { "mode": "raw", "raw": "{\n  \"value\": \"Gloaro\",\n  \"group\": \"platform\",\n  \"isPublic\": true\n}", "options": { "raw": { "language": "json" } } } } }
       ]
     }
   ]

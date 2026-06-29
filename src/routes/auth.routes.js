@@ -56,6 +56,9 @@ router.post(
     body("name").trim().notEmpty().withMessage("Name is required"),
     body("email").isEmail().withMessage("Valid email required"),
     body("password").isLength({ min: 8 }).withMessage("Password must be at least 8 characters"),
+    body("role").optional().isIn(["customer", "vendor", "user"]).withMessage("Role must be customer or vendor"),
+    body("phone").optional().trim().isLength({ min: 7 }).withMessage("Phone must be valid"),
+    body("referralCode").optional().trim().isLength({ min: 4 }).withMessage("Referral code must be valid"),
   ],
   validate,
   authController.register
@@ -146,7 +149,12 @@ router.post("/logout", protect, authController.logout);
  *       401:
  *         description: Invalid or expired refresh token
  */
-router.post("/refresh-token", authController.refreshToken);
+router.post(
+  "/refresh-token",
+  [body("refreshToken").optional().isString().withMessage("Refresh token must be a string")],
+  validate,
+  authController.refreshToken
+);
 
 /**
  * @swagger
@@ -173,7 +181,7 @@ router.post("/refresh-token", authController.refreshToken);
  *       404:
  *         description: User not found
  */
-router.post("/forgot-password", [body("email").isEmail()], validate, authController.forgotPassword);
+router.post("/forgot-password", [body("email").isEmail().withMessage("Valid email required")], validate, authController.forgotPassword);
 
 /**
  * @swagger
@@ -249,7 +257,10 @@ router.post(
 router.post(
   "/change-password",
   protect,
-  [body("currentPassword").notEmpty(), body("newPassword").isLength({ min: 8 })],
+  [
+    body("currentPassword").notEmpty().withMessage("Current password is required"),
+    body("newPassword").isLength({ min: 8 }).withMessage("New password must be at least 8 characters"),
+  ],
   validate,
   authController.changePassword
 );
@@ -290,7 +301,13 @@ router.get("/verify-email/:token", authController.verifyEmail);
  *       401:
  *         description: Not authenticated
  */
-router.post("/send-otp", protect, authController.sendOTP);
+router.post(
+  "/send-otp",
+  protect,
+  [body("type").optional().isIn(["verify", "login", "reset"]).withMessage("Invalid OTP type")],
+  validate,
+  authController.sendOTP
+);
 
 /**
  * @swagger
@@ -322,7 +339,10 @@ router.post("/send-otp", protect, authController.sendOTP);
 router.post(
   "/verify-otp",
   protect,
-  [body("otp").isLength({ min: 6, max: 6 }).withMessage("OTP must be 6 digits")],
+  [
+    body("otp").isLength({ min: 6, max: 6 }).withMessage("OTP must be 6 digits"),
+    body("type").optional().isIn(["verify", "login", "reset"]).withMessage("Invalid OTP type"),
+  ],
   validate,
   authController.verifyOTP
 );

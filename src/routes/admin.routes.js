@@ -2,6 +2,9 @@ const express = require("express");
 const router = express.Router();
 const adminController = require("../controllers/admin.controller");
 const { protect, authorize } = require("../middleware/auth");
+const { uploadSingle } = require("../config/cloudinary");
+const { body } = require("express-validator");
+const { validate } = require("../middleware/validate");
 
 router.use(protect, authorize("admin", "superadmin"));
 
@@ -138,5 +141,65 @@ router.get("/system-stats", authorize("superadmin"), adminController.getSystemSt
  *         description: Not authorized
  */
 router.post("/create-admin", authorize("superadmin"), adminController.createAdmin);
+
+router.get("/banners", adminController.getBanners);
+router.post(
+  "/banners",
+  uploadSingle("image", "banners"),
+  [
+    body("title").notEmpty().withMessage("Title is required"),
+    body("placement").optional().isIn(["home", "directory", "marketplace", "events", "dashboard"]).withMessage("Invalid placement"),
+  ],
+  validate,
+  adminController.createBanner
+);
+router.patch(
+  "/banners/:id",
+  uploadSingle("image", "banners"),
+  [
+    body("title").optional().notEmpty().withMessage("Title cannot be empty"),
+    body("placement").optional().isIn(["home", "directory", "marketplace", "events", "dashboard"]).withMessage("Invalid placement"),
+  ],
+  validate,
+  adminController.updateBanner
+);
+router.delete("/banners/:id", adminController.deleteBanner);
+
+router.get("/faqs", adminController.getFAQs);
+router.post(
+  "/faqs",
+  [
+    body("question").notEmpty().withMessage("Question is required"),
+    body("answer").notEmpty().withMessage("Answer is required"),
+  ],
+  validate,
+  adminController.createFAQ
+);
+router.patch(
+  "/faqs/:id",
+  [
+    body("question").optional().notEmpty().withMessage("Question cannot be empty"),
+    body("answer").optional().notEmpty().withMessage("Answer cannot be empty"),
+  ],
+  validate,
+  adminController.updateFAQ
+);
+router.delete("/faqs/:id", adminController.deleteFAQ);
+
+router.get("/settings", adminController.getSettings);
+router.put(
+  "/settings/:key",
+  [
+    body("value").exists().withMessage("Value is required"),
+    body("group").optional().isString().trim(),
+    body("description").optional().isString().trim(),
+    body("isPublic").optional().isBoolean().withMessage("isPublic must be boolean"),
+  ],
+  validate,
+  (req, res, next) => {
+    req.body.key = req.params.key;
+    adminController.upsertSetting(req, res, next);
+  }
+);
 
 module.exports = router;

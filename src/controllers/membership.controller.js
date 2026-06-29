@@ -4,23 +4,7 @@ const { AppError, asyncHandler } = require("../middleware/errorHandler");
 const { successResponse, paginatedResponse, getPagination } = require("../utils/response");
 const moment = require("moment");
 
-exports.getPlans = asyncHandler(async (req, res) => {
-  const plans = await MembershipPlan.find({ isActive: true }).sort("order");
-  successResponse(res, 200, "Membership plans", plans);
-});
-
-exports.createPlan = asyncHandler(async (req, res) => {
-  const plan = await MembershipPlan.create(req.body);
-  successResponse(res, 201, "Plan created", plan);
-});
-
-exports.updatePlan = asyncHandler(async (req, res) => {
-  const plan = await MembershipPlan.findByIdAndUpdate(req.params.id, req.body, { new: true });
-  if (!plan) throw new AppError("Plan not found", 404);
-  successResponse(res, 200, "Plan updated", plan);
-});
-
-exports.purchaseMembership = asyncHandler(async (req, res) => {
+const createVendorMembership = async (req, res, successMessage) => {
   const { plan, billingCycle = "monthly" } = req.body;
   const vendor = await Vendor.findOne({ user: req.user._id });
   if (!vendor) throw new AppError("Vendor profile not found", 404);
@@ -32,7 +16,6 @@ exports.purchaseMembership = asyncHandler(async (req, res) => {
   const startDate = new Date();
   const endDate = moment(startDate).add(billingCycle === "yearly" ? 1 : 1, billingCycle === "yearly" ? "year" : "month").toDate();
 
-  // Cancel existing active membership
   await Membership.findOneAndUpdate({ vendor: vendor._id, status: "active" }, { status: "cancelled", cancelledAt: new Date() });
 
   const membership = await Membership.create({
@@ -57,7 +40,32 @@ exports.purchaseMembership = asyncHandler(async (req, res) => {
     return successResponse(res, 201, "Free plan activated", membership);
   }
 
-  successResponse(res, 201, "Membership created. Proceed to payment.", { membership, price, plan });
+  return successResponse(res, 201, successMessage, { membership, price, plan });
+};
+
+exports.getPlans = asyncHandler(async (req, res) => {
+  const plans = await MembershipPlan.find({ isActive: true }).sort("order");
+  successResponse(res, 200, "Membership plans", plans);
+});
+
+exports.createPlan = asyncHandler(async (req, res) => {
+  const plan = await MembershipPlan.create(req.body);
+  successResponse(res, 201, "Plan created", plan);
+});
+
+exports.updatePlan = asyncHandler(async (req, res) => {
+  const plan = await MembershipPlan.findByIdAndUpdate(req.params.id, req.body, { new: true });
+  if (!plan) throw new AppError("Plan not found", 404);
+  successResponse(res, 200, "Plan updated", plan);
+});
+
+exports.purchaseMembership = asyncHandler(async (req, res) => {
+  await createVendorMembership(req, res, "Membership created. Proceed to payment.");
+});
+
+exports.renewMembership = asyncHandler(async (req, res) => {
+  req.body.plan = req.body.plan || req.params.plan;
+  await createVendorMembership(req, res, "Membership renewed. Proceed to payment.");
 });
 
 exports.getMyMembership = asyncHandler(async (req, res) => {

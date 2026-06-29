@@ -1,6 +1,8 @@
 const Notification = require("../models/Notification");
-const { asyncHandler } = require("../middleware/errorHandler");
+const Vendor = require("../models/Vendor");
+const { AppError, asyncHandler } = require("../middleware/errorHandler");
 const { successResponse, paginatedResponse, getPagination } = require("../utils/response");
+const { emitToUser } = require("../sockets");
 
 exports.getNotifications = asyncHandler(async (req, res) => {
   const { page, limit, skip } = getPagination(req.query);
@@ -47,7 +49,8 @@ exports.sendBroadcast = asyncHandler(async (req, res) => {
   if (userIds?.length) {
     recipients = userIds;
   } else if (role) {
-    const users = await User.find({ role }).select("_id");
+    const roleFilter = role === "customer" || role === "user" ? { role: { $in: ["customer", "user"] } } : { role };
+    const users = await User.find(roleFilter).select("_id");
     recipients = users.map((u) => u._id);
   } else {
     const users = await User.find({ isActive: true }).select("_id");
@@ -57,5 +60,41 @@ exports.sendBroadcast = asyncHandler(async (req, res) => {
   await Notification.insertMany(
     recipients.map((userId) => ({ recipient: userId, sender: req.user._id, type, title, message }))
   );
+  recipients.forEach((userId) => emitToUser(userId, "notification", { type, title, message }));
   successResponse(res, 200, `Broadcast sent to ${recipients.length} users`);
+});
+
+exports.sendUserNotification = asyncHandler(async (req, res) => {
+  const { title, message, type = "announcement", link, priority = "normal", data } = req.body;
+  const notification = await Notification.create({
+    recipient: req.params.userId,
+    sender: req.user._id,
+    type,
+    title,
+    message,
+    link,
+    priority,
+    data,
+  });
+  emitToUser(req.params.userId, "notification", notification);
+  successResponse(res, 201, "Notification sent", notification);
+});
+
+exports.sendVendorNotification = asyncHandler(async (req, res) => {
+  const vendor = await Vendor.findById(req.params.vendorId).select("user businessName");
+  if (!vendor) throw new AppError("Vendor not found", 404);
+
+  const { title, message, type = "announcement", link, priority = "normal", data } = req.body;
+  const notification = await Notification.create({
+    recipient: vendor.user,
+    sender: req.user._id,
+    type,
+    title,
+    message,
+    link,
+    priority,
+    data,
+  });
+  emitToUser(vendor.user, "notification", notification);
+  successResponse(res, 201, "Vendor notification sent", notification);
 });

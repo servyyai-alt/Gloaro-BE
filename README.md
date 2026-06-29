@@ -2,7 +2,7 @@
 
 **Built by Least Action Company** | *Sense • Solve • Scale*
 
-An enterprise-grade, production-ready backend for a Business Networking & Vendor Directory Platform built with Node.js, Express, MongoDB, Socket.IO, Razorpay, Stripe, and Cloudinary.
+An enterprise-grade backend for a Multi-Vendor Business Networking & Marketplace Platform built with Node.js, Express, MongoDB, Socket.IO, Razorpay, Stripe, and Cloudinary.
 
 ---
 
@@ -33,6 +33,7 @@ backend/
 │   │   ├── support.controller.js
 │   │   ├── report.controller.js
 │   │   ├── directory.controller.js
+│   │   ├── customer.controller.js
 │   │   └── admin.controller.js
 │   ├── models/
 │   │   ├── User.js
@@ -48,6 +49,10 @@ backend/
 │   │   ├── Referral.js
 │   │   ├── Notification.js
 │   │   ├── SupportTicket.js
+│   │   ├── Wishlist.js
+│   │   ├── Banner.js
+│   │   ├── FAQ.js
+│   │   ├── Setting.js
 │   │   └── AuditLog.js
 │   ├── routes/
 │   │   ├── auth.routes.js
@@ -66,6 +71,7 @@ backend/
 │   │   ├── support.routes.js
 │   │   ├── report.routes.js
 │   │   ├── directory.routes.js
+│   │   ├── customer.routes.js
 │   │   └── admin.routes.js
 │   ├── middleware/
 │   │   ├── auth.js           # JWT protect + authorize + optionalAuth
@@ -89,6 +95,8 @@ backend/
 │   │   ├── response.js       # Standard API response helpers
 │   │   ├── jwt.js            # JWT sign/verify/cookies
 │   │   └── email.js          # Nodemailer + email templates
+│   ├── seed/
+│   │   └── index.js          # Seed entry bridge
 │   └── seeds/
 │       └── index.js          # Database seed script
 ├── logs/
@@ -135,12 +143,24 @@ npm start
 
 ## 🔐 Default Credentials (after seeding)
 
+### Admin Login
+
+```txt
+Super Admin
+Email: superadmin@vendordirectory.com
+Password: SuperAdmin@123
+
+Admin
+Email: admin@vendordirectory.com
+Password: Admin@123
+```
+
 | Role       | Email                              | Password       |
 |------------|------------------------------------|----------------|
 | Super Admin | superadmin@vendordirectory.com   | SuperAdmin@123 |
 | Admin      | admin@vendordirectory.com          | Admin@123      |
 | Vendor     | vendor@vendordirectory.com         | Vendor@123     |
-| User       | user@vendordirectory.com           | User@123       |
+| Customer   | customer@vendordirectory.com       | Customer@123   |
 
 ---
 
@@ -154,7 +174,7 @@ Health Check: `http://localhost:5000/health`
 
 ## 🛡️ Roles & Permissions
 
-| Feature                  | Super Admin | Admin | Vendor | User |
+| Feature                  | Super Admin | Admin | Vendor | Customer |
 |--------------------------|:-----------:|:-----:|:------:|:----:|
 | User Management          | ✅          | ✅    | ❌     | ❌   |
 | Vendor Approval          | ✅          | ✅    | ❌     | ❌   |
@@ -174,10 +194,11 @@ Health Check: `http://localhost:5000/health`
 ## 💳 Payment Flow
 
 ### Razorpay
-1. `POST /payments/razorpay/order` → Get order ID
+1. `POST /payments/razorpay/order` → Get order ID. Include `membershipId` to activate a pending membership after verification.
 2. Open Razorpay checkout on frontend with order ID
 3. `POST /payments/razorpay/verify` → Verify signature
 4. Membership/feature activated automatically
+5. `POST /payments/webhook/razorpay` → Optional Razorpay webhook confirmation
 
 ### Stripe
 1. `POST /payments/stripe/intent` → Get client secret
@@ -215,6 +236,27 @@ Health Check: `http://localhost:5000/health`
 | Remove expired featured flag | Every hour       | Cleanup featuredUntil past date    |
 | Cleanup old notifications    | Weekly (Sunday)  | Delete 30d+ read notifications     |
 | Daily stats compilation      | Daily at 1:00 AM | Log platform metrics               |
+
+---
+
+## 🔌 Key API Modules
+
+Base URL: `/api/v1`
+
+| Module | Main Routes |
+|--------|-------------|
+| Authentication | `/auth/register`, `/auth/login`, `/auth/refresh-token`, `/auth/forgot-password`, `/auth/reset-password/:token`, `/auth/change-password`, `/auth/verify-email/:token`, `/auth/me` |
+| Profile & Users | `/users/profile`, `/users/activity`, `/users` |
+| Vendors | `/vendors`, `/vendors/me/dashboard`, `/vendors/me/products`, `/vendors/me/services`, `/vendors/me/reviews`, `/vendors/me/payments`, `/vendors/me/subscriptions` |
+| Customer | `/customers/wishlist`, `/customers/enquiries`, `/customers/events` |
+| Directory/Search | `/directory/search`, `/directory/nearby`, `/directory/global-search`, `/products`, `/services` |
+| Leads | `/leads`, `/leads/:id/status`, `/leads/:id/notes`, `/leads/:id/followups` |
+| Memberships | `/memberships/plans`, `/memberships/purchase`, `/memberships/renew`, `/memberships/my`, `/memberships/my/history` |
+| Payments | `/payments/razorpay/order`, `/payments/razorpay/verify`, `/payments/webhook/razorpay`, `/payments/transactions`, `/payments/invoices` |
+| Notifications | `/notifications`, `/notifications/broadcast`, `/notifications/users/:userId`, `/notifications/vendors/:vendorId` |
+| Admin | `/admin/dashboard`, `/admin/pending-approvals`, `/admin/banners`, `/admin/faqs`, `/admin/settings` |
+| Reports & Analytics | `/reports/dashboard`, `/reports/analytics`, `/reports/revenue`, `/reports/vendors`, `/reports/products`, `/reports/services` |
+| Support | `/support`, `/support/my`, `/support/admin/dashboard`, `/support/:id/reply`, `/support/:id/close`, `/support/:id/assign` |
 
 ---
 

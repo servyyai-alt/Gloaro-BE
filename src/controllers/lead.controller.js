@@ -23,17 +23,17 @@ exports.updateLeadStatus = asyncHandler(async (req, res) => {
 });
 
 exports.addNote = asyncHandler(async (req, res) => {
-  const lead = await leadService.addNote(req.params.id, req.body.content, req.user._id, req.body.isInternal);
+  const lead = await leadService.addNote(req.params.id, req.body.content, req.user._id, req.user.role, req.body.isInternal);
   successResponse(res, 200, "Note added", lead);
 });
 
 exports.scheduleFollowUp = asyncHandler(async (req, res) => {
-  const lead = await leadService.scheduleFollowUp(req.params.id, req.body);
+  const lead = await leadService.scheduleFollowUp(req.params.id, req.body, req.user._id, req.user.role);
   successResponse(res, 200, "Follow-up scheduled", lead);
 });
 
 exports.assignLead = asyncHandler(async (req, res) => {
-  const lead = await leadService.assignLead(req.params.id, req.body.assignedTo);
+  const lead = await leadService.assignLead(req.params.id, req.body.assignedTo, req.user.role);
   successResponse(res, 200, "Lead assigned", lead);
 });
 

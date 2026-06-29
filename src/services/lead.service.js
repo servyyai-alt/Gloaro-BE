@@ -58,6 +58,8 @@ class LeadService {
       const vendor = await Vendor.findOne({ user: userId });
       if (!vendor) throw new AppError("Vendor profile not found", 404);
       filter.vendor = vendor._id;
+    } else if (["customer", "user"].includes(role)) {
+      filter.submittedBy = userId;
     } else if (vendorId) {
       filter.vendor = vendorId;
     }
@@ -94,6 +96,10 @@ class LeadService {
       if (!vendor || lead.vendor._id.toString() !== vendor._id.toString()) {
         throw new AppError("Not authorized", 403);
       }
+    } else if (["customer", "user"].includes(role)) {
+      if (!lead.submittedBy || lead.submittedBy._id.toString() !== userId.toString()) {
+        throw new AppError("Not authorized", 403);
+      }
     }
 
     // Mark as read
@@ -110,6 +116,15 @@ class LeadService {
     const lead = await Lead.findById(leadId);
     if (!lead) throw new AppError("Lead not found", 404);
 
+    if (role === "vendor") {
+      const vendor = await Vendor.findOne({ user: userId });
+      if (!vendor || lead.vendor.toString() !== vendor._id.toString()) {
+        throw new AppError("Not authorized", 403);
+      }
+    } else if (!["admin", "superadmin"].includes(role)) {
+      throw new AppError("Not authorized", 403);
+    }
+
     const oldStatus = lead.status;
     lead.status = status;
 
@@ -120,26 +135,42 @@ class LeadService {
     return lead;
   }
 
-  async addNote(leadId, content, userId, isInternal) {
+  async assertLeadManager(lead, userId, role) {
+    if (role === "vendor") {
+      const vendor = await Vendor.findOne({ user: userId });
+      if (!vendor || lead.vendor.toString() !== vendor._id.toString()) {
+        throw new AppError("Not authorized", 403);
+      }
+      return;
+    }
+
+    if (!["admin", "superadmin"].includes(role)) {
+      throw new AppError("Not authorized", 403);
+    }
+  }
+
+  async addNote(leadId, content, userId, role, isInternal) {
     const lead = await Lead.findById(leadId);
     if (!lead) throw new AppError("Lead not found", 404);
+    await this.assertLeadManager(lead, userId, role);
 
     lead.notes.push({ content, addedBy: userId, isInternal });
     await lead.save();
     return lead;
   }
 
-  async scheduleFollowUp(leadId, followUpData) {
-    const lead = await Lead.findByIdAndUpdate(
-      leadId,
-      { $push: { followUps: followUpData } },
-      { new: true }
-    );
+  async scheduleFollowUp(leadId, followUpData, userId, role) {
+    const lead = await Lead.findById(leadId);
     if (!lead) throw new AppError("Lead not found", 404);
+    await this.assertLeadManager(lead, userId, role);
+
+    lead.followUps.push(followUpData);
+    await lead.save();
     return lead;
   }
 
-  async assignLead(leadId, assignedTo) {
+  async assignLead(leadId, assignedTo, role) {
+    if (!["admin", "superadmin"].includes(role)) throw new AppError("Not authorized", 403);
     const lead = await Lead.findByIdAndUpdate(leadId, { assignedTo }, { new: true }).populate("assignedTo", "name email");
     if (!lead) throw new AppError("Lead not found", 404);
     return lead;
