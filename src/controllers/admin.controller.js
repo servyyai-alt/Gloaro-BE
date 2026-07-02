@@ -18,6 +18,7 @@ exports.getDashboard = asyncHandler(async (req, res) => {
     verifiedVendors, servicesCount, productsCount, eventsCount,
     newUsersToday, newVendorsToday, revenueAgg, membershipRevenueAgg,
     monthlyRevenue, recentPayments, membershipApplicationsCount, pendingMembershipApplications,
+    documentsVerifiedApplications, underReviewApplications, finalApprovalApplications,
   ] = await Promise.all([
     User.countDocuments({ role: { $ne: "superadmin" } }),
     Vendor.countDocuments(),
@@ -52,6 +53,9 @@ exports.getDashboard = asyncHandler(async (req, res) => {
     Payment.find().populate("user", "name email").populate("vendor", "businessName").sort("-createdAt").limit(10),
     MembershipApplication.countDocuments(),
     MembershipApplication.countDocuments({ status: "submitted" }),
+    MembershipApplication.countDocuments({ status: "documents_verified" }),
+    MembershipApplication.countDocuments({ status: "under_review" }),
+    MembershipApplication.countDocuments({ status: "approved" }),
   ]);
 
   successResponse(res, 200, "Admin dashboard", {
@@ -64,6 +68,11 @@ exports.getDashboard = asyncHandler(async (req, res) => {
     pendingMembershipApplications,
     monthlyRevenue,
     recentPayments,
+    applicationStatusCounts: {
+      documentsVerified: documentsVerifiedApplications,
+      underReview: underReviewApplications,
+      finalApproval: finalApprovalApplications,
+    },
   });
 });
 

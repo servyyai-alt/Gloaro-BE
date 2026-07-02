@@ -34,7 +34,7 @@ router.get("/:id", membershipApplicationController.getApplicationById);
 router.patch(
   "/:id/status",
   [
-    body("status").isIn(["submitted", "under_review", "approved", "rejected"]).withMessage("Invalid status"),
+    body("status").isIn(["submitted", "documents_verified", "under_review", "approved", "rejected"]).withMessage("Invalid status"),
     body("adminNotes").optional().isString(),
   ],
   validate,
