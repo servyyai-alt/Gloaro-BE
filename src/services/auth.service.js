@@ -1,9 +1,11 @@
 const crypto = require("crypto");
 const User = require("../models/User");
+const Referral = require("../models/Referral");
 const { generateAccessToken, generateRefreshToken } = require("../utils/jwt");
 const { sendTemplateEmail } = require("../utils/email");
 const { AppError } = require("../middleware/errorHandler");
 const { setCache, deleteCache } = require("../config/redis");
+const idGenerator = require("./idGenerator.service");
 
 class AuthService {
   async register(data) {
@@ -24,7 +26,16 @@ class AuthService {
       password,
       role: ["vendor", "customer", "user"].includes(role) ? (role === "user" ? "customer" : role) : "customer",
       referredBy: referrer?._id,
+      referralCode: await idGenerator.generateReferralId(),
     });
+
+    if (referrer) {
+      await Referral.create({
+        referrer: referrer._id,
+        referred: user._id,
+        code: await idGenerator.generateReferralId(),
+      });
+    }
 
     // Email verification
     const token = user.generateEmailVerificationToken();

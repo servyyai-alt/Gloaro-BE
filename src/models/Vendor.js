@@ -4,6 +4,7 @@ const slugify = require("slugify");
 const vendorSchema = new mongoose.Schema(
   {
     user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true, unique: true },
+    vendorId: { type: String, unique: true, sparse: true, trim: true, uppercase: true, immutable: true, index: true },
     businessName: { type: String, required: [true, "Business name is required"], trim: true },
     slug: { type: String, unique: true },
     ownerName: { type: String, required: true, trim: true },
@@ -110,6 +111,7 @@ vendorSchema.index({ isFeatured: 1 });
 vendorSchema.index({ "address.city": 1, "address.state": 1 });
 vendorSchema.index({ createdAt: -1 });
 vendorSchema.index({ businessName: "text", description: "text", tags: "text" });
+vendorSchema.index({ vendorId: 1 }, { unique: true, sparse: true });
 
 // Pre-save: generate slug
 vendorSchema.pre("save", async function (next) {

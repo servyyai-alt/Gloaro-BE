@@ -7,11 +7,13 @@ const Lead = require("../models/Lead");
 const Payment = require("../models/Payment");
 const Review = require("../models/Review");
 const { Membership } = require("../models/Membership");
+const { ADMIN_ROLE_VALUES, isAdminRole } = require("../constants/adminRoles");
 const { AppError } = require("../middleware/errorHandler");
 const { getPagination } = require("../utils/response");
 const { deleteFromCloudinary } = require("../config/cloudinary");
 const { sendTemplateEmail } = require("../utils/email");
 const { setCache, getCache, deleteCache } = require("../config/redis");
+const idGenerator = require("./idGenerator.service");
 
 class VendorService {
   async createVendor(userId, data, files) {
@@ -20,7 +22,23 @@ class VendorService {
 
     const user = await User.findById(userId);
 
-    const vendorData = { ...data, user: userId, email: data.email || user.email };
+    const stateCode = String(data.stateCode || data.address?.stateCode || data.address?.state || "")
+      .trim()
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, "")
+      .slice(0, 2);
+    const areaCode = String(data.areaCode || data.address?.cityCode || data.address?.city || data.businessName || "")
+      .trim()
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, "")
+      .slice(0, 3);
+
+    const vendorData = {
+      ...data,
+      user: userId,
+      email: data.email || user.email,
+      vendorId: await idGenerator.generateVendorId({ stateCode, areaCode }),
+    };
 
     if (files?.logo) vendorData.logo = { url: files.logo[0].path, publicId: files.logo[0].filename };
     if (files?.coverImage) vendorData.coverImage = { url: files.coverImage[0].path, publicId: files.coverImage[0].filename };
@@ -31,7 +49,7 @@ class VendorService {
     await User.findByIdAndUpdate(userId, { role: "vendor" });
 
     // Notify admins
-    const admins = await User.find({ role: { $in: ["admin", "superadmin"] } }).select("_id");
+    const admins = await User.find({ role: { $in: ADMIN_ROLE_VALUES } }).select("_id");
     if (admins.length > 0) {
       await Notification.insertMany(
         admins.map((a) => ({
@@ -111,9 +129,11 @@ class VendorService {
     if (!vendor) throw new AppError("Vendor not found", 404);
 
     const isOwner = vendor.user.toString() === userId.toString();
-    if (!isOwner && !["admin", "superadmin"].includes(role)) {
+    if (!isOwner && !isAdminRole(role)) {
       throw new AppError("Not authorized to update this vendor", 403);
     }
+
+    delete data.vendorId;
 
     if (files?.logo) {
       if (vendor.logo?.publicId) await deleteFromCloudinary(vendor.logo.publicId).catch(() => {});
@@ -125,7 +145,7 @@ class VendorService {
     }
 
     // Admins cannot change status directly via this endpoint
-    if (!["admin", "superadmin"].includes(role)) {
+    if (!isAdminRole(role)) {
       delete data.status;
       delete data.isFeatured;
       delete data.isVerified;
@@ -179,7 +199,7 @@ class VendorService {
     const vendor = await Vendor.findById(vendorId);
     if (!vendor) throw new AppError("Vendor not found", 404);
 
-    if (vendor.user.toString() !== userId.toString() && !["admin", "superadmin"].includes(role)) {
+    if (vendor.user.toString() !== userId.toString() && !isAdminRole(role)) {
       throw new AppError("Not authorized", 403);
     }
 

@@ -5,6 +5,7 @@
 const ROLES = {
   SUPER_ADMIN: "superadmin",
   ADMIN: "admin",
+  CUSTOM_ADMIN: "custom_admin",
   VENDOR: "vendor",
   USER: "user",
 };

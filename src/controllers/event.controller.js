@@ -1,11 +1,24 @@
 const Event = require("../models/Event");
 const { AppError, asyncHandler } = require("../middleware/errorHandler");
 const { successResponse, paginatedResponse, getPagination } = require("../utils/response");
-const { v4: uuidv4 } = require("uuid");
+const { isAdminRole } = require("../constants/adminRoles");
+const idGenerator = require("../services/idGenerator.service");
 
 exports.createEvent = asyncHandler(async (req, res) => {
   if (req.file) req.body.coverImage = { url: req.file.path, publicId: req.file.filename };
-  const event = await Event.create({ ...req.body, organizer: req.user._id });
+  delete req.body.eventId;
+
+  const scope = req.body.scope || (req.body.chapterCode ? "chapter" : req.body.stateCode ? "state" : "national");
+  const event = await Event.create({
+    ...req.body,
+    eventId: await idGenerator.generateEventId({
+      scope,
+      stateCode: req.body.stateCode,
+      chapterCode: req.body.chapterCode,
+      startDate: req.body.startDate,
+    }),
+    organizer: req.user._id,
+  });
   successResponse(res, 201, "Event created", event);
 });
 
@@ -38,7 +51,8 @@ exports.updateEvent = asyncHandler(async (req, res) => {
   const event = await Event.findById(req.params.id);
   if (!event) throw new AppError("Event not found", 404);
   const isOwner = event.organizer.toString() === req.user._id.toString();
-  if (!isOwner && !["admin", "superadmin"].includes(req.user.role)) throw new AppError("Not authorized", 403);
+  if (!isOwner && !isAdminRole(req.user.role)) throw new AppError("Not authorized", 403);
+  delete req.body.eventId;
   if (req.file) req.body.coverImage = { url: req.file.path, publicId: req.file.filename };
   const updated = await Event.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true });
   successResponse(res, 200, "Event updated", updated);
@@ -62,7 +76,7 @@ exports.registerForEvent = asyncHandler(async (req, res) => {
 
   event.attendees.push({
     user: req.user._id,
-    ticketNumber: `TKT-${uuidv4().substring(0, 8).toUpperCase()}`,
+    ticketNumber: await idGenerator.generateEventTicketId({ eventId: event.eventId || event._id }),
     guestCount: req.body.guestCount || 0,
   });
   event.stats.totalRegistrations = event.attendees.length;
@@ -84,7 +98,7 @@ exports.deleteEvent = asyncHandler(async (req, res) => {
   const event = await Event.findById(req.params.id);
   if (!event) throw new AppError("Event not found", 404);
   const isOwner = event.organizer.toString() === req.user._id.toString();
-  if (!isOwner && !["admin", "superadmin"].includes(req.user.role)) throw new AppError("Not authorized", 403);
+  if (!isOwner && !isAdminRole(req.user.role)) throw new AppError("Not authorized", 403);
   await event.deleteOne();
   successResponse(res, 200, "Event deleted");
 });

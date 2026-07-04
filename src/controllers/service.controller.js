@@ -2,18 +2,34 @@ const Service = require("../models/Service");
 const Vendor = require("../models/Vendor");
 const { AppError, asyncHandler } = require("../middleware/errorHandler");
 const { successResponse, paginatedResponse, getPagination } = require("../utils/response");
+const { isAdminRole } = require("../constants/adminRoles");
+const idGenerator = require("../services/idGenerator.service");
 
 exports.createService = asyncHandler(async (req, res) => {
   const vendor = await Vendor.findOne({ user: req.user._id });
   if (!vendor) throw new AppError("Vendor profile not found", 404);
   if (vendor.status !== "approved") throw new AppError("Vendor account not approved", 403);
 
+  if (!vendor.vendorId) {
+    vendor.vendorId = await idGenerator.generateVendorId({
+      stateCode: String(vendor.address?.state || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 2),
+      areaCode: String(vendor.address?.city || vendor.businessName || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 3),
+    });
+    await vendor.save();
+  }
+
   delete req.body.status;
   delete req.body.isFeatured;
   delete req.body.approvedBy;
   delete req.body.approvedAt;
+  delete req.body.serviceId;
   const images = req.files ? req.files.map((f) => ({ url: f.path, publicId: f.filename })) : [];
-  const service = await Service.create({ ...req.body, vendor: vendor._id, gallery: images });
+  const service = await Service.create({
+    ...req.body,
+    serviceId: await idGenerator.generateServiceId({ vendorId: vendor.vendorId }),
+    vendor: vendor._id,
+    gallery: images,
+  });
   await Vendor.findByIdAndUpdate(vendor._id, { $inc: { "stats.totalServices": 1 } });
   successResponse(res, 201, "Service created and pending approval", service);
 });
@@ -52,14 +68,15 @@ exports.updateService = asyncHandler(async (req, res) => {
   const service = await Service.findById(req.params.id).populate("vendor");
   if (!service) throw new AppError("Service not found", 404);
   const isOwner = service.vendor.user.toString() === req.user._id.toString();
-  if (!isOwner && !["admin", "superadmin"].includes(req.user.role)) throw new AppError("Not authorized", 403);
-  if (isOwner && !["admin", "superadmin"].includes(req.user.role)) {
+  if (!isOwner && !isAdminRole(req.user.role)) throw new AppError("Not authorized", 403);
+  if (isOwner && !isAdminRole(req.user.role)) {
     delete req.body.status;
     delete req.body.isFeatured;
     delete req.body.approvedBy;
     delete req.body.approvedAt;
     delete req.body.rejectedReason;
   }
+  delete req.body.serviceId;
   if (req.files?.length) {
     req.body.gallery = req.files.map((f) => ({ url: f.path, publicId: f.filename }));
   }
@@ -83,7 +100,7 @@ exports.deleteService = asyncHandler(async (req, res) => {
   const service = await Service.findById(req.params.id).populate("vendor");
   if (!service) throw new AppError("Service not found", 404);
   const isOwner = service.vendor.user.toString() === req.user._id.toString();
-  if (!isOwner && !["admin", "superadmin"].includes(req.user.role)) throw new AppError("Not authorized", 403);
+  if (!isOwner && !isAdminRole(req.user.role)) throw new AppError("Not authorized", 403);
   await service.deleteOne();
   await Vendor.findByIdAndUpdate(service.vendor._id, { $inc: { "stats.totalServices": -1 } });
   successResponse(res, 200, "Service deleted");

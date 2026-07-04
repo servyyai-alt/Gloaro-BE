@@ -44,6 +44,8 @@ const allowedOrigins = [
   "http://127.0.0.1:5173",
 ].filter(Boolean);
 
+const isLoopbackRequest = (req) => ["::1", "127.0.0.1", "::ffff:127.0.0.1"].includes(req.ip);
+
 // Trust proxy
 app.set("trust proxy", 1);
 
@@ -72,6 +74,7 @@ const limiter = rateLimit({
   message: { success: false, message: "Too many requests, please try again later." },
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => process.env.NODE_ENV !== "production" && isLoopbackRequest(req),
 });
 app.use("/api/", limiter);
 
@@ -80,6 +83,8 @@ const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 20,
   message: { success: false, message: "Too many authentication attempts." },
+  skipSuccessfulRequests: true,
+  skip: (req) => process.env.NODE_ENV !== "production" && isLoopbackRequest(req),
 });
 
 // Body parsers

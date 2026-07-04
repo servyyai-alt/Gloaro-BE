@@ -1,10 +1,19 @@
 const SupportTicket = require("../models/SupportTicket");
 const { AppError, asyncHandler } = require("../middleware/errorHandler");
 const { successResponse, paginatedResponse, getPagination } = require("../utils/response");
+const { isAdminRole } = require("../constants/adminRoles");
+const idGenerator = require("../services/idGenerator.service");
 
 exports.createTicket = asyncHandler(async (req, res) => {
   const attachments = req.files ? req.files.map((f) => ({ url: f.path, publicId: f.filename, name: f.originalname })) : [];
-  const ticket = await SupportTicket.create({ ...req.body, user: req.user._id, attachments });
+  delete req.body.ticketNumber;
+  const ticket = await SupportTicket.create({
+    ...req.body,
+    ticketNumber: await idGenerator.generateSupportTicketId(),
+    user: req.user._id,
+    attachments,
+    slaDeadline: new Date(Date.now() + (req.body.priority === "critical" ? 4 : req.body.priority === "high" ? 24 : req.body.priority === "medium" ? 48 : 72) * 3600000),
+  });
   successResponse(res, 201, "Support ticket created", ticket);
 });
 
@@ -28,7 +37,7 @@ exports.getTicketById = asyncHandler(async (req, res) => {
   if (!ticket) throw new AppError("Ticket not found", 404);
 
   const isOwner = ticket.user._id.toString() === req.user._id.toString();
-  if (!isOwner && !["admin", "superadmin"].includes(req.user.role)) throw new AppError("Not authorized", 403);
+  if (!isOwner && !isAdminRole(req.user.role)) throw new AppError("Not authorized", 403);
   successResponse(res, 200, "Ticket retrieved", ticket);
 });
 
@@ -37,7 +46,7 @@ exports.replyToTicket = asyncHandler(async (req, res) => {
   if (!ticket) throw new AppError("Ticket not found", 404);
 
   const isOwner = ticket.user.toString() === req.user._id.toString();
-  const isAdmin = ["admin", "superadmin"].includes(req.user.role);
+  const isAdmin = isAdminRole(req.user.role);
   if (!isOwner && !isAdmin) throw new AppError("Not authorized", 403);
 
   const attachments = req.files ? req.files.map((f) => ({ url: f.path, publicId: f.filename, name: f.originalname })) : [];
@@ -63,7 +72,7 @@ exports.closeTicket = asyncHandler(async (req, res) => {
   const ticket = await SupportTicket.findById(req.params.id);
   if (!ticket) throw new AppError("Ticket not found", 404);
   const isOwner = ticket.user.toString() === req.user._id.toString();
-  if (!isOwner && !["admin", "superadmin"].includes(req.user.role)) throw new AppError("Not authorized", 403);
+  if (!isOwner && !isAdminRole(req.user.role)) throw new AppError("Not authorized", 403);
 
   ticket.status = "closed";
   ticket.closedAt = new Date();

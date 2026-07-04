@@ -14,7 +14,7 @@ const fileSchema = new mongoose.Schema(
 
 const membershipApplicationSchema = new mongoose.Schema(
   {
-    applicationNumber: { type: String, unique: true, sparse: true },
+    applicationNumber: { type: String, unique: true, sparse: true, immutable: true, trim: true, uppercase: true, index: true },
     step: { type: Number, default: 3 },
     status: { type: String, enum: ["submitted", "documents_verified", "under_review", "approved", "rejected"], default: "submitted" },
     agreement: {
@@ -85,5 +85,6 @@ const membershipApplicationSchema = new mongoose.Schema(
 membershipApplicationSchema.index({ status: 1, createdAt: -1 });
 membershipApplicationSchema.index({ "personal.emailAddress": 1 });
 membershipApplicationSchema.index({ "professional.companyName": "text", "personal.fullName": "text", "personal.emailAddress": "text" });
+membershipApplicationSchema.index({ applicationNumber: 1 }, { unique: true, sparse: true });
 
 module.exports = mongoose.model("MembershipApplication", membershipApplicationSchema);

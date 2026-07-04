@@ -32,7 +32,7 @@ const paymentSchema = new mongoose.Schema(
       default: "pending",
     },
     description: String,
-    invoiceNumber: { type: String, unique: true, sparse: true },
+    invoiceNumber: { type: String, unique: true, sparse: true, immutable: true, trim: true, uppercase: true, index: true },
     refund: {
       amount: Number,
       reason: String,
@@ -56,14 +56,6 @@ paymentSchema.index({ vendor: 1 });
 paymentSchema.index({ status: 1 });
 paymentSchema.index({ gateway: 1 });
 paymentSchema.index({ createdAt: -1 });
-
-// Auto-generate invoice number
-paymentSchema.pre("save", async function (next) {
-  if (!this.invoiceNumber && this.status === "completed") {
-    const count = await mongoose.model("Payment").countDocuments();
-    this.invoiceNumber = `INV-${new Date().getFullYear()}-${String(count + 1).padStart(6, "0")}`;
-  }
-  next();
-});
+paymentSchema.index({ invoiceNumber: 1 }, { unique: true, sparse: true });
 
 module.exports = mongoose.model("Payment", paymentSchema);

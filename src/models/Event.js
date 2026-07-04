@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 
 const eventSchema = new mongoose.Schema(
   {
+    eventId: { type: String, unique: true, sparse: true, trim: true, uppercase: true, immutable: true, index: true },
     title: { type: String, required: true, trim: true },
     slug: { type: String, unique: true },
     description: { type: String, required: true },
@@ -54,6 +55,7 @@ eventSchema.index({ startDate: 1 });
 eventSchema.index({ status: 1 });
 eventSchema.index({ organizer: 1 });
 eventSchema.index({ title: "text", description: "text" });
+eventSchema.index({ eventId: 1 }, { unique: true, sparse: true });
 
 const slugify = require("slugify");
 eventSchema.pre("save", async function (next) {
