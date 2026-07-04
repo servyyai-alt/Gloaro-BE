@@ -15,7 +15,7 @@ const userSchema = new mongoose.Schema(
     },
     phone: { type: String, trim: true },
     password: { type: String, required: [true, "Password is required"], minlength: 8, select: false },
-    role: { type: String, enum: ["superadmin", "admin", "vendor", "user", "customer"], default: "customer" },
+    role: { type: String, enum: ["superadmin", "admin", "vendor", "user", "customer", "secretary"], default: "customer" },
     avatar: { url: String, publicId: String },
     isActive: { type: Boolean, default: true },
     isEmailVerified: { type: Boolean, default: false },
