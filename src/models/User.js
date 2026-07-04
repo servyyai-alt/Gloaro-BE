@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
 const crypto = require("crypto");
+const { ADMIN_ROLE_VALUES } = require("../constants/adminRoles");
 
 const userSchema = new mongoose.Schema(
   {
@@ -15,7 +16,7 @@ const userSchema = new mongoose.Schema(
     },
     phone: { type: String, trim: true },
     password: { type: String, required: [true, "Password is required"], minlength: 8, select: false },
-    role: { type: String, enum: ["superadmin", "admin", "vendor", "user", "customer"], default: "customer" },
+    role: { type: String, enum: [...ADMIN_ROLE_VALUES, "vendor", "user", "customer"], default: "customer" },
     avatar: { url: String, publicId: String },
     isActive: { type: Boolean, default: true },
     isEmailVerified: { type: Boolean, default: false },
@@ -36,7 +37,8 @@ const userSchema = new mongoose.Schema(
     lastLoginIp: String,
     loginAttempts: { type: Number, default: 0 },
     lockUntil: Date,
-    referralCode: { type: String, unique: true, sparse: true },
+    memberId: { type: String, unique: true, sparse: true, trim: true, uppercase: true, immutable: true },
+    referralCode: { type: String, unique: true, sparse: true, trim: true, uppercase: true, immutable: true },
     referredBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     pushTokens: [String],
     preferences: {
@@ -64,6 +66,7 @@ const userSchema = new mongoose.Schema(
 userSchema.index({ email: 1 });
 userSchema.index({ phone: 1 });
 userSchema.index({ role: 1 });
+userSchema.index({ memberId: 1 }, { unique: true, sparse: true });
 userSchema.index({ referralCode: 1 });
 userSchema.index({ createdAt: -1 });
 
@@ -122,13 +125,5 @@ userSchema.methods.incLoginAttempts = async function () {
   }
   return this.updateOne(updates);
 };
-
-// Generate referral code
-userSchema.pre("save", function (next) {
-  if (!this.referralCode) {
-    this.referralCode = Math.random().toString(36).substring(2, 8).toUpperCase();
-  }
-  next();
-});
 
 module.exports = mongoose.model("User", userSchema);

@@ -4,6 +4,7 @@ const slugify = require("slugify");
 const productSchema = new mongoose.Schema(
   {
     vendor: { type: mongoose.Schema.Types.ObjectId, ref: "Vendor", required: true },
+    productId: { type: String, unique: true, sparse: true, trim: true, uppercase: true, immutable: true, index: true },
     title: { type: String, required: true, trim: true },
     slug: { type: String, unique: true },
     description: { type: String, maxlength: 3000 },
@@ -66,6 +67,7 @@ productSchema.index({ category: 1 });
 productSchema.index({ status: 1 });
 productSchema.index({ isFeatured: 1 });
 productSchema.index({ title: "text", description: "text", tags: "text" });
+productSchema.index({ productId: 1 }, { unique: true, sparse: true });
 
 productSchema.pre("save", async function (next) {
   if (this.isModified("title")) {

@@ -5,6 +5,7 @@ const { AppError } = require("../middleware/errorHandler");
 const { getPagination } = require("../utils/response");
 const { sendTemplateEmail } = require("../utils/email");
 const { getSocketIO } = require("../sockets");
+const { isAdminRole } = require("../constants/adminRoles");
 
 class LeadService {
   async submitLead(data, submittedBy, ipAddress, userAgent) {
@@ -121,7 +122,7 @@ class LeadService {
       if (!vendor || lead.vendor.toString() !== vendor._id.toString()) {
         throw new AppError("Not authorized", 403);
       }
-    } else if (!["admin", "superadmin"].includes(role)) {
+    } else if (!isAdminRole(role)) {
       throw new AppError("Not authorized", 403);
     }
 
@@ -144,7 +145,7 @@ class LeadService {
       return;
     }
 
-    if (!["admin", "superadmin"].includes(role)) {
+    if (!isAdminRole(role)) {
       throw new AppError("Not authorized", 403);
     }
   }
@@ -170,7 +171,7 @@ class LeadService {
   }
 
   async assignLead(leadId, assignedTo, role) {
-    if (!["admin", "superadmin"].includes(role)) throw new AppError("Not authorized", 403);
+    if (!isAdminRole(role)) throw new AppError("Not authorized", 403);
     const lead = await Lead.findByIdAndUpdate(leadId, { assignedTo }, { new: true }).populate("assignedTo", "name email");
     if (!lead) throw new AppError("Lead not found", 404);
     return lead;

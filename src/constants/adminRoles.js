@@ -1,0 +1,41 @@
+const ADMIN_ROLE_VALUES = [
+  "superadmin",
+  "admin",
+  "franchise_admin",
+  "ecommerce_admin",
+  "marketplace_admin",
+  "digital_marketing_admin",
+  "training_admin",
+  "finance_admin",
+  "state_director",
+  "area_director",
+  "executive_director",
+  "launch_director",
+  "direct_consultant",
+  "operation_vice_president",
+  "membership_verification_admin",
+  "custom_admin",
+];
+
+const ADMIN_ROLE_LABELS = {
+  superadmin: "Super Admin",
+  admin: "Admin",
+  franchise_admin: "Franchise Admin",
+  ecommerce_admin: "Ecommerce Admin",
+  marketplace_admin: "Marketplace Admin",
+  digital_marketing_admin: "Digital Marketing Admin",
+  training_admin: "Training Admin",
+  finance_admin: "Finance Admin",
+  state_director: "State Director",
+  area_director: "Area Director",
+  executive_director: "Executive Director",
+  launch_director: "Launch Director",
+  direct_consultant: "Direct Consultant",
+  operation_vice_president: "Operation Vice President",
+  membership_verification_admin: "Membership Verification Admin",
+  custom_admin: "Custom Admin",
+};
+
+const isAdminRole = (role) => ADMIN_ROLE_VALUES.includes(role);
+
+module.exports = { ADMIN_ROLE_VALUES, ADMIN_ROLE_LABELS, isAdminRole };

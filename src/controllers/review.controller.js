@@ -2,6 +2,7 @@ const Review = require("../models/Review");
 const Vendor = require("../models/Vendor");
 const { AppError, asyncHandler } = require("../middleware/errorHandler");
 const { successResponse, paginatedResponse, getPagination } = require("../utils/response");
+const { isAdminRole } = require("../constants/adminRoles");
 
 exports.createReview = asyncHandler(async (req, res) => {
   const existing = await Review.findOne({ vendor: req.body.vendor, user: req.user._id });
@@ -51,7 +52,7 @@ exports.replyToReview = asyncHandler(async (req, res) => {
   if (!review) throw new AppError("Review not found", 404);
   const vendor = await Vendor.findOne({ user: req.user._id });
   const isVendorOwner = vendor && review.vendor._id.toString() === vendor._id.toString();
-  if (!isVendorOwner && !["admin", "superadmin"].includes(req.user.role)) throw new AppError("Not authorized", 403);
+  if (!isVendorOwner && !isAdminRole(req.user.role)) throw new AppError("Not authorized", 403);
 
   review.reply = { content: req.body.content, repliedAt: new Date(), repliedBy: req.user._id };
   await review.save();
@@ -72,7 +73,7 @@ exports.deleteReview = asyncHandler(async (req, res) => {
   const review = await Review.findById(req.params.id);
   if (!review) throw new AppError("Review not found", 404);
   const isOwner = review.user.toString() === req.user._id.toString();
-  if (!isOwner && !["admin", "superadmin"].includes(req.user.role)) throw new AppError("Not authorized", 403);
+  if (!isOwner && !isAdminRole(req.user.role)) throw new AppError("Not authorized", 403);
   await review.deleteOne();
   successResponse(res, 200, "Review deleted");
 });

@@ -1,18 +1,14 @@
 const MembershipApplication = require("../models/MembershipApplication");
+const User = require("../models/User");
 const { cloudinary } = require("../config/cloudinary");
 const { asyncHandler } = require("../middleware/errorHandler");
 const { successResponse, paginatedResponse, getPagination } = require("../utils/response");
+const idGenerator = require("../services/idGenerator.service");
 
 const parseData = (body) => {
   if (!body.data) return body;
   if (typeof body.data === "object") return body.data;
   return JSON.parse(body.data);
-};
-
-const generateApplicationNumber = () => {
-  const year = new Date().getFullYear();
-  const suffix = Math.floor(1000 + Math.random() * 9000);
-  return `GLO-${year}-${suffix}`;
 };
 
 const fileFromUpload = (file, field) => {
@@ -44,7 +40,7 @@ exports.createApplication = asyncHandler(async (req, res) => {
 
   const application = await MembershipApplication.create({
     ...payload,
-    applicationNumber: payload.applicationNumber || generateApplicationNumber(),
+    applicationNumber: await idGenerator.generateGenericModuleId("membership_application"),
     documents: { ...(payload.documents || {}), ...documents },
     submittedBy: req.user?._id,
     status: "submitted",
@@ -121,5 +117,23 @@ exports.updateApplicationStatus = asyncHandler(async (req, res) => {
     { new: true, runValidators: true }
   );
   if (!application) return res.status(404).json({ success: false, message: "Membership application not found" });
+
+  if (status === "approved" && application.submittedBy) {
+    const user = await User.findById(application.submittedBy).select("memberId");
+    if (user && !user.memberId) {
+      const stateCode = String(application.address?.state || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 2);
+      const areaCode = String(application.address?.city || application.professional?.companyName || "")
+        .trim()
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, "")
+        .slice(0, 3);
+
+      if (stateCode && areaCode) {
+        user.memberId = await idGenerator.generateMemberId({ stateCode, areaCode });
+        await user.save({ validateBeforeSave: false });
+      }
+    }
+  }
+
   successResponse(res, 200, "Membership application updated", application);
 });

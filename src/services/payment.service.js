@@ -7,6 +7,8 @@ const Vendor = require("../models/Vendor");
 const Notification = require("../models/Notification");
 const { AppError } = require("../middleware/errorHandler");
 const { getPagination } = require("../utils/response");
+const { isAdminRole } = require("../constants/adminRoles");
+const idGenerator = require("./idGenerator.service");
 
 const razorpay = new Razorpay({
   key_id: process.env.RAZORPAY_KEY_ID,
@@ -18,8 +20,7 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 class PaymentService {
   async ensureInvoiceNumber(payment) {
     if (!payment || payment.invoiceNumber || payment.status !== "completed") return payment;
-    const count = await Payment.countDocuments({ invoiceNumber: { $exists: true, $ne: null } });
-    payment.invoiceNumber = `INV-${new Date().getFullYear()}-${String(count + 1).padStart(6, "0")}`;
+    payment.invoiceNumber = await idGenerator.generateInvoiceNumber({ date: payment.paidAt || payment.createdAt || new Date() });
     await payment.save({ validateBeforeSave: false });
     return payment;
   }
@@ -251,7 +252,7 @@ class PaymentService {
   async getPayments(query, userId, role) {
     const { page, limit, skip } = getPagination(query);
     const filter = {};
-    if (!["admin", "superadmin"].includes(role)) filter.user = userId;
+    if (!isAdminRole(role)) filter.user = userId;
     if (query.status) filter.status = query.status;
     if (query.gateway) filter.gateway = query.gateway;
     if (query.type) filter.type = query.type;
@@ -267,7 +268,7 @@ class PaymentService {
   async getPaymentById(paymentId, userId, role) {
     const payment = await Payment.findById(paymentId).populate("user", "name email").populate("vendor", "businessName");
     if (!payment) throw new AppError("Payment not found", 404);
-    if (!["admin", "superadmin"].includes(role) && payment.user._id.toString() !== userId.toString()) {
+    if (!isAdminRole(role) && payment.user._id.toString() !== userId.toString()) {
       throw new AppError("Not authorized", 403);
     }
     return payment;

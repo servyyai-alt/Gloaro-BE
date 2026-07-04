@@ -4,6 +4,7 @@ const slugify = require("slugify");
 const serviceSchema = new mongoose.Schema(
   {
     vendor: { type: mongoose.Schema.Types.ObjectId, ref: "Vendor", required: true },
+    serviceId: { type: String, unique: true, sparse: true, trim: true, uppercase: true, immutable: true, index: true },
     title: { type: String, required: [true, "Service title is required"], trim: true },
     slug: { type: String, unique: true },
     description: { type: String, required: true, maxlength: 3000 },
@@ -49,6 +50,7 @@ serviceSchema.index({ category: 1 });
 serviceSchema.index({ status: 1 });
 serviceSchema.index({ isFeatured: 1 });
 serviceSchema.index({ title: "text", description: "text", tags: "text" });
+serviceSchema.index({ serviceId: 1 }, { unique: true, sparse: true });
 
 serviceSchema.pre("save", async function (next) {
   if (this.isModified("title")) {

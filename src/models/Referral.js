@@ -4,7 +4,7 @@ const referralSchema = new mongoose.Schema(
   {
     referrer: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
     referred: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
-    code: { type: String, required: true },
+    code: { type: String, required: true, unique: true, immutable: true, trim: true, uppercase: true },
     status: { type: String, enum: ["pending", "completed", "rewarded", "expired"], default: "pending" },
     reward: {
       type: { type: String, enum: ["cash", "discount", "credits", "none"], default: "none" },
@@ -26,6 +26,6 @@ const referralSchema = new mongoose.Schema(
 
 referralSchema.index({ referrer: 1 });
 referralSchema.index({ referred: 1 });
-referralSchema.index({ code: 1 });
+referralSchema.index({ code: 1 }, { unique: true });
 
 module.exports = mongoose.model("Referral", referralSchema);

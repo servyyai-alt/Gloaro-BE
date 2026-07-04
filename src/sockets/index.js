@@ -2,6 +2,7 @@ const { Server } = require("socket.io");
 const { verifyAccessToken } = require("../utils/jwt");
 const User = require("../models/User");
 const logger = require("../utils/logger");
+const { isAdminRole } = require("../constants/adminRoles");
 
 let io = null;
 
@@ -50,7 +51,7 @@ const initSocket = (server) => {
     });
 
     // Join admin room
-    if (["admin", "superadmin"].includes(socket.user.role)) {
+    if (isAdminRole(socket.user.role)) {
       socket.join("admins");
     }
 

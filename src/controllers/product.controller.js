@@ -2,18 +2,34 @@ const Product = require("../models/Product");
 const Vendor = require("../models/Vendor");
 const { AppError, asyncHandler } = require("../middleware/errorHandler");
 const { successResponse, paginatedResponse, getPagination } = require("../utils/response");
+const { isAdminRole } = require("../constants/adminRoles");
+const idGenerator = require("../services/idGenerator.service");
 
 exports.createProduct = asyncHandler(async (req, res) => {
   const vendor = await Vendor.findOne({ user: req.user._id });
   if (!vendor) throw new AppError("Vendor profile not found", 404);
   if (vendor.status !== "approved") throw new AppError("Vendor account not approved", 403);
 
+  if (!vendor.vendorId) {
+    vendor.vendorId = await idGenerator.generateVendorId({
+      stateCode: String(vendor.address?.state || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 2),
+      areaCode: String(vendor.address?.city || vendor.businessName || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 3),
+    });
+    await vendor.save();
+  }
+
   delete req.body.status;
   delete req.body.isFeatured;
   delete req.body.approvedBy;
   delete req.body.approvedAt;
+  delete req.body.productId;
   const images = req.files ? req.files.map((f, i) => ({ url: f.path, publicId: f.filename, isMain: i === 0 })) : [];
-  const product = await Product.create({ ...req.body, vendor: vendor._id, images });
+  const product = await Product.create({
+    ...req.body,
+    productId: await idGenerator.generateProductId({ vendorId: vendor.vendorId }),
+    vendor: vendor._id,
+    images,
+  });
   await Vendor.findByIdAndUpdate(vendor._id, { $inc: { "stats.totalProducts": 1 } });
   successResponse(res, 201, "Product created and pending approval", product);
 });
@@ -56,14 +72,15 @@ exports.updateProduct = asyncHandler(async (req, res) => {
   const product = await Product.findById(req.params.id).populate("vendor");
   if (!product) throw new AppError("Product not found", 404);
   const isOwner = product.vendor.user.toString() === req.user._id.toString();
-  if (!isOwner && !["admin", "superadmin"].includes(req.user.role)) throw new AppError("Not authorized", 403);
-  if (isOwner && !["admin", "superadmin"].includes(req.user.role)) {
+  if (!isOwner && !isAdminRole(req.user.role)) throw new AppError("Not authorized", 403);
+  if (isOwner && !isAdminRole(req.user.role)) {
     delete req.body.status;
     delete req.body.isFeatured;
     delete req.body.approvedBy;
     delete req.body.approvedAt;
     delete req.body.rejectedReason;
   }
+  delete req.body.productId;
   if (req.files?.length) {
     req.body.images = req.files.map((f, i) => ({ url: f.path, publicId: f.filename, isMain: i === 0 }));
   }
@@ -87,7 +104,7 @@ exports.deleteProduct = asyncHandler(async (req, res) => {
   const product = await Product.findById(req.params.id).populate("vendor");
   if (!product) throw new AppError("Product not found", 404);
   const isOwner = product.vendor.user.toString() === req.user._id.toString();
-  if (!isOwner && !["admin", "superadmin"].includes(req.user.role)) throw new AppError("Not authorized", 403);
+  if (!isOwner && !isAdminRole(req.user.role)) throw new AppError("Not authorized", 403);
   await product.deleteOne();
   await Vendor.findByIdAndUpdate(product.vendor._id, { $inc: { "stats.totalProducts": -1 } });
   successResponse(res, 200, "Product deleted");

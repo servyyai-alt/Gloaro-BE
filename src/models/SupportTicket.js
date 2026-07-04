@@ -2,7 +2,7 @@ const mongoose = require("mongoose");
 
 const supportTicketSchema = new mongoose.Schema(
   {
-    ticketNumber: { type: String, unique: true },
+    ticketNumber: { type: String, unique: true, sparse: true, immutable: true, trim: true, uppercase: true, index: true },
     user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
     assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     subject: { type: String, required: true, trim: true },
@@ -42,16 +42,6 @@ const supportTicketSchema = new mongoose.Schema(
 supportTicketSchema.index({ user: 1 });
 supportTicketSchema.index({ status: 1 });
 supportTicketSchema.index({ assignedTo: 1 });
-
-supportTicketSchema.pre("save", async function (next) {
-  if (!this.ticketNumber) {
-    const count = await mongoose.model("SupportTicket").countDocuments();
-    this.ticketNumber = `TKT-${String(count + 1).padStart(6, "0")}`;
-    // SLA: 24h for high, 48h for medium, 72h for low
-    const hours = this.priority === "critical" ? 4 : this.priority === "high" ? 24 : this.priority === "medium" ? 48 : 72;
-    this.slaDeadline = new Date(Date.now() + hours * 3600000);
-  }
-  next();
-});
+supportTicketSchema.index({ ticketNumber: 1 }, { unique: true, sparse: true });
 
 module.exports = mongoose.model("SupportTicket", supportTicketSchema);
