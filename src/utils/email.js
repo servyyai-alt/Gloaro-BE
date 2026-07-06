@@ -124,6 +124,71 @@ const emailTemplates = {
         </a>
       </div>`,
   }),
+
+  membershipApplicationNew: (name, applicationNumber, chapterName) => ({
+    subject: `New Membership Application Submitted - ${applicationNumber}`,
+    html: `
+      <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px">
+        <h2 style="color:#2563eb">New Membership Application</h2>
+        <p>Hi ${name},</p>
+        <p>A new membership application with number <strong>${applicationNumber}</strong> has been submitted for chapter <strong>${chapterName}</strong>.</p>
+        <p>Please log in to your dashboard to review it.</p>
+        <a href="${process.env.CLIENT_URL}/admin"
+           style="display:inline-block;background:#2563eb;color:white;padding:12px 24px;border-radius:6px;text-decoration:none;margin:16px 0">
+          Review Application
+        </a>
+      </div>`,
+  }),
+
+  membershipApplicationApproved: (name, applicationNumber, memberId) => ({
+    subject: "Your Membership Application is Approved! - Gloaro Network",
+    html: `
+      <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px">
+        <h2 style="color:#16a34a">Congratulations! Your Application is Approved</h2>
+        <p>Hi ${name},</p>
+        <p>Your membership application <strong>${applicationNumber}</strong> has been approved.</p>
+        <p>Your unique Member ID is: <strong>${memberId}</strong></p>
+        <p>Welcome to the Gloaro Network community!</p>
+        <a href="${process.env.CLIENT_URL}"
+           style="display:inline-block;background:#16a34a;color:white;padding:12px 24px;border-radius:6px;text-decoration:none;margin:16px 0">
+          Access Platform
+        </a>
+      </div>`,
+  }),
+
+  membershipApplicationRejected: (name, applicationNumber, reason) => ({
+    subject: "Membership Application Status Update - Gloaro Network",
+    html: `
+      <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px">
+        <h2 style="color:#dc2626">Application Update</h2>
+        <p>Hi ${name},</p>
+        <p>Your membership application <strong>${applicationNumber}</strong> was not approved at this time.</p>
+        <p><strong>Reason:</strong> ${reason}</p>
+        <p>Please log in and update your onboarding portfolio to resubmit.</p>
+        <a href="${process.env.CLIENT_URL}/membership-application"
+           style="display:inline-block;background:#dc2626;color:white;padding:12px 24px;border-radius:6px;text-decoration:none;margin:16px 0">
+          Update Portfolio
+        </a>
+      </div>`,
+  }),
+
+  adminCredentials: (name, email, password, officialId) => ({
+    subject: "Your Gloaro Official Account Credentials",
+    html: `
+      <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px">
+        <h2 style="color:#2563eb">Welcome to Gloaro Network</h2>
+        <p>Hi ${name},</p>
+        <p>An official account has been created for you. Here are your temporary login credentials:</p>
+        <p><strong>Official ID:</strong> ${officialId}</p>
+        <p><strong>Login Email:</strong> ${email}</p>
+        <p><strong>Temporary Password:</strong> ${password}</p>
+        <p>Please log in and change your password immediately.</p>
+        <a href="${process.env.CLIENT_URL}/login"
+           style="display:inline-block;background:#2563eb;color:white;padding:12px 24px;border-radius:6px;text-decoration:none;margin:16px 0">
+          Log In Now
+        </a>
+      </div>`,
+  }),
 };
 
 const sendTemplateEmail = async (to, template, ...args) => {

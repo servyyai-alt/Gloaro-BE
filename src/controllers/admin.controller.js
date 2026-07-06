@@ -11,10 +11,12 @@ const Setting = require("../models/Setting");
 const MembershipApplication = require("../models/MembershipApplication");
 const EnterpriseRecord = require("../models/EnterpriseRecord");
 const idGenerator = require("../services/idGenerator.service");
+const { populateUserOrganizationLocations } = require("../utils/userPopulateHelper");
 const { superAdminDefaults } = require("../constants/superAdminDefaults");
 const { ADMIN_ROLE_VALUES, isAdminRole } = require("../constants/adminRoles");
 const { generateAccessToken, generateRefreshToken } = require("../utils/jwt");
-const { asyncHandler } = require("../middleware/errorHandler");
+const { asyncHandler, AppError } = require("../middleware/errorHandler");
+const { sendTemplateEmail } = require("../utils/email");
 const { successResponse, paginatedResponse, getPagination } = require("../utils/response");
 
 const SUPER_CONFIG_KEYS = {
@@ -179,6 +181,72 @@ const deriveEnterpriseIdMetadata = async (module, body = {}) => {
 };
 
 exports.getDashboard = asyncHandler(async (req, res) => {
+  const role = req.user.role;
+  const isSuperOrAdmin = ["superadmin", "admin"].includes(role);
+
+  const filter = {};
+  const userFilter = { role: { $ne: "superadmin" } };
+  const vendorFilter = {};
+  const appFilter = {};
+
+  if (!isSuperOrAdmin) {
+    const meta = req.user.meta ? (typeof req.user.meta.toObject === "function" ? req.user.meta.toObject() : (req.user.meta instanceof Map ? Object.fromEntries(req.user.meta) : req.user.meta)) : {};
+    const profile = meta.adminProfile || {};
+    const org = profile.organization || {};
+
+    const resolveLocationIds = async (org) => {
+      const filters = {};
+      const isValidId = (val) => mongoose.Types.ObjectId.isValid(val);
+
+      if (org.region) {
+        const match = await EnterpriseRecord.findOne({ module: "organization", type: "region", $or: [isValidId(org.region) ? { _id: org.region } : null, { code: org.region }, { name: org.region }].filter(Boolean) });
+        if (match) filters.regionId = match._id;
+      }
+      if (org.state) {
+        const match = await EnterpriseRecord.findOne({ module: "organization", type: "state", $or: [isValidId(org.state) ? { _id: org.state } : null, { code: org.state }, { name: org.state }].filter(Boolean) });
+        if (match) filters.stateId = match._id;
+      }
+      if (org.district) {
+        const match = await EnterpriseRecord.findOne({ module: "organization", type: "district", $or: [isValidId(org.district) ? { _id: org.district } : null, { code: org.district }, { name: org.district }].filter(Boolean) });
+        if (match) filters.districtId = match._id;
+      }
+      if (org.chapter) {
+        const match = await EnterpriseRecord.findOne({ module: "organization", type: "chapter", $or: [isValidId(org.chapter) ? { _id: org.chapter } : null, { code: org.chapter }, { name: org.chapter }].filter(Boolean) });
+        if (match) filters.chapterId = match._id;
+      }
+      return filters;
+    };
+
+    const locationIds = await resolveLocationIds(org);
+
+    if (role === "region_director") {
+      filter.regionId = locationIds.regionId;
+    } else if (role === "state_director") {
+      filter.stateId = locationIds.stateId;
+    } else if (["executive_director", "district_director", "area_director"].includes(role)) {
+      filter.districtId = locationIds.districtId;
+    } else if (["launch_director", "direct_consultant", "chapter_president", "vice_president"].includes(role)) {
+      filter.chapterId = locationIds.chapterId;
+    }
+
+    if (filter.regionId) {
+      userFilter["meta.adminProfile.organization.region"] = filter.regionId.toString();
+      appFilter.regionId = filter.regionId;
+    }
+    if (filter.stateId) {
+      userFilter["meta.adminProfile.organization.state"] = filter.stateId.toString();
+      appFilter.stateId = filter.stateId;
+    }
+    if (filter.districtId) {
+      userFilter["meta.adminProfile.organization.district"] = filter.districtId.toString();
+      appFilter.districtId = filter.districtId;
+    }
+    if (filter.chapterId) {
+      userFilter["meta.adminProfile.organization.chapter"] = filter.chapterId.toString();
+      appFilter.chapterId = filter.chapterId;
+    }
+  }
+
   const [
     totalUsers, totalVendors, pendingVendors, activeVendors,
     verifiedVendors, servicesCount, productsCount, eventsCount,
@@ -186,16 +254,16 @@ exports.getDashboard = asyncHandler(async (req, res) => {
     monthlyRevenue, recentPayments, membershipApplicationsCount, pendingMembershipApplications,
     documentsVerifiedApplications, underReviewApplications, finalApprovalApplications,
   ] = await Promise.all([
-    User.countDocuments({ role: { $ne: "superadmin" } }),
-    Vendor.countDocuments(),
-    Vendor.countDocuments({ status: "pending" }),
-    Vendor.countDocuments({ status: "approved", isActive: true }),
-    Vendor.countDocuments({ isVerified: true }),
+    User.countDocuments(userFilter),
+    Vendor.countDocuments(vendorFilter),
+    Vendor.countDocuments({ ...vendorFilter, status: "pending" }),
+    Vendor.countDocuments({ ...vendorFilter, status: "approved", isActive: true }),
+    Vendor.countDocuments({ ...vendorFilter, isVerified: true }),
     Service.countDocuments({ isActive: true }),
     Product.countDocuments({ isActive: true }),
     Event.countDocuments({ isActive: true }),
-    User.countDocuments({ createdAt: { $gte: new Date(new Date().setHours(0, 0, 0, 0)) } }),
-    Vendor.countDocuments({ createdAt: { $gte: new Date(new Date().setHours(0, 0, 0, 0)) } }),
+    User.countDocuments({ ...userFilter, createdAt: { $gte: new Date(new Date().setHours(0, 0, 0, 0)) } }),
+    Vendor.countDocuments({ ...vendorFilter, createdAt: { $gte: new Date(new Date().setHours(0, 0, 0, 0)) } }),
     Payment.aggregate([
       { $match: { status: "completed" } },
       { $group: { _id: null, total: { $sum: "$amount" } } },
@@ -217,11 +285,11 @@ exports.getDashboard = asyncHandler(async (req, res) => {
       { $limit: 12 },
     ]),
     Payment.find().populate("user", "name email").populate("vendor", "businessName").sort("-createdAt").limit(10),
-    MembershipApplication.countDocuments(),
-    MembershipApplication.countDocuments({ status: "submitted" }),
-    MembershipApplication.countDocuments({ status: "documents_verified" }),
-    MembershipApplication.countDocuments({ status: "under_review" }),
-    MembershipApplication.countDocuments({ status: "approved" }),
+    MembershipApplication.countDocuments(appFilter),
+    MembershipApplication.countDocuments({ ...appFilter, status: "submitted" }),
+    MembershipApplication.countDocuments({ ...appFilter, status: "documents_verified" }),
+    MembershipApplication.countDocuments({ ...appFilter, status: "under_review" }),
+    MembershipApplication.countDocuments({ ...appFilter, status: "approved" }),
   ]);
 
   successResponse(res, 200, "Admin dashboard", {
@@ -836,41 +904,174 @@ exports.getAdminAccounts = asyncHandler(async (req, res) => {
     User.countDocuments(filter),
   ]);
 
-  paginatedResponse(res, admins, page, limit, total, "Admin accounts retrieved");
+  const populatedAdmins = await populateUserOrganizationLocations(admins);
+  paginatedResponse(res, populatedAdmins, page, limit, total, "Admin accounts retrieved");
 });
 
 exports.createAdminAccount = asyncHandler(async (req, res) => {
-  if (req.user.role !== "superadmin") {
-    return res.status(403).json({ success: false, message: "Only Super Admin can create admin accounts" });
-  }
-
+  const creatorRole = req.user.role;
   const body = normalizeAdminBody(req.body);
   const { name, email, phone, password, role = "admin" } = body;
+
   if (!isAdminRole(role)) return res.status(400).json({ success: false, message: "Invalid admin role" });
+
   const existing = await User.findOne({ email });
   if (existing) return res.status(409).json({ success: false, message: "Email already registered" });
+
+  // 1. Verify Role Hierarchy
+  const CREATION_HIERARCHY = {
+    superadmin: ["admin"],
+    admin: ["region_director"],
+    region_director: ["state_director"],
+    state_director: ["district_director", "area_director"],
+    district_director: ["executive_director"],
+    area_director: ["executive_director"],
+    executive_director: ["launch_director"],
+    launch_director: ["direct_consultant"],
+    direct_consultant: ["chapter_president"],
+    chapter_president: ["vice_president"],
+    vice_president: ["secretary"],
+  };
+
+  const allowedRoles = CREATION_HIERARCHY[creatorRole] || [];
+  if (!allowedRoles.includes(role)) {
+    throw new AppError(`Your role (${creatorRole}) is not permitted to create accounts for ${role}.`, 403);
+  }
+
+  // 2. Location Inheritance & Validation
+  const creatorMeta = getUserMeta(req.user);
+  const creatorOrg = creatorMeta.adminProfile?.organization || {};
+  let childOrg = body.organization ? { ...body.organization } : {};
+
+  const isGlobalRole = ["superadmin", "admin"].includes(creatorRole);
+
+  if (!isGlobalRole) {
+    if (creatorRole === "region_director") {
+      if (!creatorOrg.region) throw new AppError("Creator does not have a assigned Region", 400);
+      if (!childOrg.state) throw new AppError("State is required for State Director", 400);
+      
+      const stateRecord = await EnterpriseRecord.findOne({ type: "state", _id: childOrg.state, parent: creatorOrg.region });
+      if (!stateRecord) throw new AppError("Selected State does not belong to creator's Region", 400);
+      
+      childOrg.region = creatorOrg.region;
+    } else if (creatorRole === "state_director") {
+      if (!creatorOrg.state) throw new AppError("Creator does not have a assigned State", 400);
+      if (!childOrg.district) throw new AppError("District is required for District Director", 400);
+      
+      const districtRecord = await EnterpriseRecord.findOne({ type: "district", _id: childOrg.district, parent: creatorOrg.state });
+      if (!districtRecord) throw new AppError("Selected District does not belong to creator's State", 400);
+      
+      childOrg.region = creatorOrg.region;
+      childOrg.state = creatorOrg.state;
+    } else if (creatorRole === "district_director") {
+      if (!creatorOrg.district) throw new AppError("Creator does not have a assigned District", 400);
+      if (!childOrg.chapter) throw new AppError("Chapter is required for Executive Director", 400);
+
+      const chapterRecord = await EnterpriseRecord.findOne({ type: "chapter", _id: childOrg.chapter, parent: creatorOrg.district });
+      if (!chapterRecord) throw new AppError("Selected Chapter does not belong to creator's District", 400);
+      
+      childOrg.region = creatorOrg.region;
+      childOrg.state = creatorOrg.state;
+      childOrg.district = creatorOrg.district;
+    } else if (["executive_director", "launch_director", "direct_consultant", "chapter_president", "vice_president"].includes(creatorRole)) {
+      if (!creatorOrg.chapter) throw new AppError("Creator does not have a assigned Chapter", 400);
+      
+      childOrg.region = creatorOrg.region;
+      childOrg.state = creatorOrg.state;
+      childOrg.district = creatorOrg.district;
+      childOrg.chapter = creatorOrg.chapter;
+    }
+  }
+
+  // 3. Unique Official Limits per Location
+  if (role === "chapter_president") {
+    const existingPresident = await User.findOne({
+      role: "chapter_president",
+      "meta.adminProfile.organization.chapter": childOrg.chapter?.toString()
+    });
+    if (existingPresident) {
+      throw new AppError("Only one Chapter President is allowed per Chapter.", 400);
+    }
+  }
+
+  if (role === "state_director") {
+    const existing = await User.findOne({
+      role: "state_director",
+      "meta.adminProfile.organization.state": childOrg.state?.toString()
+    });
+    if (existing) {
+      throw new AppError("Only one State Director is allowed per State.", 400);
+    }
+  }
+
+  if (role === "district_director") {
+    const existing = await User.findOne({
+      role: "district_director",
+      "meta.adminProfile.organization.district": childOrg.district?.toString()
+    });
+    if (existing) {
+      throw new AppError("Only one District Director is allowed per District.", 400);
+    }
+  }
+
+  // 4. Generate unique Official ID and temporary credentials
+  const officialId = await idGenerator.generateOfficialId();
+  const tempPassword = password || Math.random().toString(36).slice(-8) + "Aa1!";
 
   const admin = new User({
     name,
     email,
     phone,
-    password,
+    password: tempPassword,
     role,
+    officialId,
     avatar: req.file ? { url: req.file.path, publicId: req.file.filename } : undefined,
     isEmailVerified: true,
   });
-  applyAdminProfile(admin, buildAdminProfile(body));
+
+  // Force password change on first login
+  const profileBody = {
+    ...body,
+    organization: childOrg,
+    forcePasswordChange: true
+  };
+
+  applyAdminProfile(admin, buildAdminProfile(profileBody));
   await admin.save();
 
+  // 5. Audit Log Creation
   await AuditLog.create({
     user: req.user._id,
     action: "admin_created",
     resource: "User",
     resourceId: admin._id,
-    details: { after: { role, email, adminProfile: getUserMeta(admin).adminProfile } },
+    details: {
+      creatorRole: req.user.role,
+      newUserRole: role,
+      region: childOrg.region || null,
+      state: childOrg.state || null,
+      district: childOrg.district || null,
+      area: childOrg.area || null,
+      chapter: childOrg.chapter || null,
+      ipAddress: req.ip,
+      device: req.get("User-Agent"),
+      after: { role, email, adminProfile: getUserMeta(admin).adminProfile }
+    },
     ipAddress: req.ip,
     userAgent: req.get("User-Agent"),
   });
+
+  // 6. Deliver credentials via email
+  try {
+    await sendTemplateEmail(
+      email,
+      "adminCredentials",
+      name,
+      email,
+      tempPassword,
+      officialId
+    );
+  } catch (_) {}
 
   const { password: _, refreshToken: __, ...adminData } = admin.toObject();
   successResponse(res, 201, "Admin account created", adminData);

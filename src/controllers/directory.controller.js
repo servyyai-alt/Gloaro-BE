@@ -2,8 +2,20 @@ const Vendor = require("../models/Vendor");
 const Product = require("../models/Product");
 const Service = require("../models/Service");
 const Category = require("../models/Category");
+const EnterpriseRecord = require("../models/EnterpriseRecord");
 const { asyncHandler } = require("../middleware/errorHandler");
 const { successResponse, paginatedResponse, getPagination } = require("../utils/response");
+const getUserMeta = (user) => {
+  if (!user?.meta) return {};
+  if (typeof user.meta.toObject === "function") return user.meta.toObject();
+  if (user.meta instanceof Map) return Object.fromEntries(user.meta);
+  return user.meta;
+};
+
+const getUserOrg = (user) => {
+  const meta = getUserMeta(user);
+  return meta?.adminProfile?.organization || {};
+};
 
 exports.searchDirectory = asyncHandler(async (req, res) => {
   const { page, limit, skip } = getPagination(req.query);
@@ -85,4 +97,158 @@ exports.globalSearch = asyncHandler(async (req, res) => {
   ]);
 
   successResponse(res, 200, "Global search results", { vendors, products, services });
+});
+
+exports.getOrganizationHierarchy = asyncHandler(async (req, res) => {
+  const records = await EnterpriseRecord.find({
+    module: "organization",
+  }).select("name code type parent director assignedTo metadata").lean();
+  successResponse(res, 200, "Organization hierarchy retrieved", records);
+});
+
+exports.getRegions = asyncHandler(async (req, res) => {
+  const user = req.user;
+  let query = { module: "organization", type: "region", status: "active" };
+
+  const isGlobal = ["superadmin", "admin"].includes(user?.role);
+  if (!isGlobal) {
+    const org = getUserOrg(user);
+    if (org.region) {
+      query._id = org.region;
+    } else {
+      return res.status(200).json({ success: true, data: { regions: [] } });
+    }
+  }
+
+  const regions = await EnterpriseRecord.find(query).select("_id name").lean();
+  res.status(200).json({ success: true, data: { regions } });
+});
+
+exports.getStates = asyncHandler(async (req, res) => {
+  const { region } = req.query;
+  const user = req.user;
+  const isGlobal = ["superadmin", "admin"].includes(user?.role);
+  const org = getUserOrg(user);
+
+  let targetRegionId = region;
+  if (!isGlobal) {
+    if (!org.region) {
+      return res.status(200).json({ success: true, data: { states: [] } });
+    }
+    targetRegionId = org.region.toString();
+  }
+
+  if (!targetRegionId) {
+    return res.status(200).json({ success: true, data: { states: [] } });
+  }
+
+  let query = {
+    module: "organization",
+    type: "state",
+    parent: targetRegionId,
+    status: "active"
+  };
+
+  if (!isGlobal && user.role !== "region_director" && org.state) {
+    query._id = org.state;
+  }
+
+  const states = await EnterpriseRecord.find(query).select("_id name").lean();
+  res.status(200).json({ success: true, data: { states } });
+});
+
+exports.getDistricts = asyncHandler(async (req, res) => {
+  const { state } = req.query;
+  const user = req.user;
+  const isGlobal = ["superadmin", "admin"].includes(user?.role);
+  const org = getUserOrg(user);
+
+  let targetStateId = state;
+  if (!isGlobal) {
+    if (!org.state) {
+      if (user.role === "region_director" && org.region) {
+        const states = await EnterpriseRecord.find({ module: "organization", type: "state", parent: org.region }).select("_id").lean();
+        const stateIds = states.map(s => s._id.toString());
+        if (!stateIds.includes(state)) {
+          return res.status(200).json({ success: true, data: { districts: [] } });
+        }
+      } else {
+        return res.status(200).json({ success: true, data: { districts: [] } });
+      }
+    } else {
+      targetStateId = org.state.toString();
+    }
+  }
+
+  if (!targetStateId) {
+    return res.status(200).json({ success: true, data: { districts: [] } });
+  }
+
+  let query = {
+    module: "organization",
+    type: "district",
+    parent: targetStateId,
+    status: "active"
+  };
+
+  if (!isGlobal && !["region_director", "state_director"].includes(user.role) && org.district) {
+    query._id = org.district;
+  }
+
+  const districts = await EnterpriseRecord.find(query).select("_id name").lean();
+  res.status(200).json({ success: true, data: { districts } });
+});
+
+exports.getAreas = asyncHandler(async (req, res) => {
+  // Area level is completely bypassed and deprecated in 4-level hierarchy.
+  res.status(200).json({ success: true, data: { areas: [] } });
+});
+
+exports.getChapters = asyncHandler(async (req, res) => {
+  const { district } = req.query;
+  const user = req.user;
+  const isGlobal = ["superadmin", "admin"].includes(user?.role);
+  const org = getUserOrg(user);
+
+  let targetDistrictId = district;
+  if (!isGlobal) {
+    if (!org.district) {
+      if (user.role === "region_director" && org.region) {
+        const states = await EnterpriseRecord.find({ module: "organization", type: "state", parent: org.region }).select("_id").lean();
+        const districts = await EnterpriseRecord.find({ module: "organization", type: "district", parent: { $in: states.map(s => s._id) } }).select("_id").lean();
+        const districtIds = districts.map(d => d._id.toString());
+        if (!districtIds.includes(district)) {
+          return res.status(200).json({ success: true, data: { chapters: [] } });
+        }
+      } else if (user.role === "state_director" && org.state) {
+        const districts = await EnterpriseRecord.find({ module: "organization", type: "district", parent: org.state }).select("_id").lean();
+        const districtIds = districts.map(d => d._id.toString());
+        if (!districtIds.includes(district)) {
+          return res.status(200).json({ success: true, data: { chapters: [] } });
+        }
+      } else {
+        return res.status(200).json({ success: true, data: { chapters: [] } });
+      }
+    } else {
+      targetDistrictId = org.district.toString();
+    }
+  }
+
+  if (!targetDistrictId) {
+    return res.status(200).json({ success: true, data: { chapters: [] } });
+  }
+
+  let query = {
+    module: "organization",
+    type: "chapter",
+    parent: targetDistrictId,
+    status: "active"
+  };
+
+  if (!isGlobal && !["region_director", "state_director", "district_director"].includes(user.role) && org.chapter) {
+    query._id = org.chapter;
+  }
+
+  const chapters = await EnterpriseRecord.find(query).select("_id name").lean();
+  res.status(200).json({ success: true, data: { chapters } });
 });

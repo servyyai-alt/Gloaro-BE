@@ -3,6 +3,7 @@ const AuditLog = require("../models/AuditLog");
 const { AppError, asyncHandler } = require("../middleware/errorHandler");
 const { successResponse, paginatedResponse, getPagination } = require("../utils/response");
 const { deleteFromCloudinary } = require("../config/cloudinary");
+const { populateUserOrganizationLocations } = require("../utils/userPopulateHelper");
 
 const compactObject = (data) => Object.fromEntries(
   Object.entries(data).filter(([, value]) => value !== undefined)
@@ -22,19 +23,22 @@ exports.getUsers = asyncHandler(async (req, res) => {
     User.find(filter).select("-password -refreshToken").sort("-createdAt").skip(skip).limit(limit),
     User.countDocuments(filter),
   ]);
-  paginatedResponse(res, users, page, limit, total);
+  const populatedUsers = await populateUserOrganizationLocations(users);
+  paginatedResponse(res, populatedUsers, page, limit, total);
 });
 
 exports.getUserById = asyncHandler(async (req, res) => {
   const user = await User.findById(req.params.id).select("-password -refreshToken");
   if (!user) throw new AppError("User not found", 404);
-  successResponse(res, 200, "User retrieved", user);
+  const populated = await populateUserOrganizationLocations([user]);
+  successResponse(res, 200, "User retrieved", populated[0]);
 });
 
 exports.getProfile = asyncHandler(async (req, res) => {
-  const user = await User.findById(req.user._id).select("-password -refreshToken");
+  const user = await User.findById(req.user._id).select("-password -refreshToken").populate("createdBy", "name email role");
   if (!user) throw new AppError("User not found", 404);
-  successResponse(res, 200, "Profile retrieved", user);
+  const populated = await populateUserOrganizationLocations([user]);
+  successResponse(res, 200, "Profile retrieved", populated[0]);
 });
 
 exports.updateUser = asyncHandler(async (req, res) => {
