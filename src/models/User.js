@@ -40,6 +40,7 @@ const userSchema = new mongoose.Schema(
     loginAttempts: { type: Number, default: 0 },
     lockUntil: Date,
     memberId: { type: String, unique: true, sparse: true, trim: true, uppercase: true, immutable: true },
+    officialId: { type: String, unique: true, sparse: true, trim: true, uppercase: true, immutable: true },
     referralCode: { type: String, unique: true, sparse: true, trim: true, uppercase: true, immutable: true },
     referredBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     pushTokens: [String],
@@ -69,6 +70,7 @@ userSchema.index({ email: 1 });
 userSchema.index({ phone: 1 });
 userSchema.index({ role: 1 });
 userSchema.index({ memberId: 1 }, { unique: true, sparse: true });
+userSchema.index({ officialId: 1 }, { unique: true, sparse: true });
 userSchema.index({ referralCode: 1 });
 userSchema.index({ createdAt: -1 });
 

@@ -5,8 +5,9 @@ const { protect, authorize } = require("../middleware/auth");
 const { uploadSingle } = require("../config/cloudinary");
 const { body } = require("express-validator");
 const { validate } = require("../middleware/validate");
+const { ADMIN_ROLE_VALUES } = require("../constants/adminRoles");
 
-router.use(protect, authorize("admin", "superadmin"));
+router.use(protect, authorize(...ADMIN_ROLE_VALUES));
 
 const getMeta = (user) => {
   if (!user?.meta) return {};
@@ -158,10 +159,10 @@ router.get("/audit-logs", adminController.getAuditLogs);
  */
 router.get("/system-stats", authorize("superadmin"), adminController.getSystemStats);
 router.get("/system-logs", authorize("superadmin"), adminController.getSystemLogs);
-router.get("/admin-accounts", authorize("superadmin", "admin"), adminController.getAdminAccounts);
+router.get("/admin-accounts", authorize(...ADMIN_ROLE_VALUES), adminController.getAdminAccounts);
 router.post(
   "/admin-accounts",
-  authorize("superadmin"),
+  authorize(...ADMIN_ROLE_VALUES),
   uploadSingle("avatar", "admin-avatars"),
   [
     body("name").notEmpty().withMessage("Name is required"),
@@ -174,7 +175,7 @@ router.post(
 );
 router.patch(
   "/admin-accounts/:id",
-  authorize("superadmin", "admin"),
+  authorize(...ADMIN_ROLE_VALUES),
   uploadSingle("avatar", "admin-avatars"),
   [
     body("email").not().exists().withMessage("Email cannot be changed"),
@@ -195,28 +196,28 @@ router.post(
 );
 router.patch(
   "/admin-accounts/:id/status",
-  authorize("superadmin", "admin"),
+  authorize(...ADMIN_ROLE_VALUES),
   [body("action").isIn(["suspend", "activate", "lock", "unlock"]).withMessage("Invalid status action")],
   validate,
   adminController.updateAdminAccountStatus
 );
 router.patch(
   "/admin-accounts/:id/reset-password",
-  authorize("superadmin", "admin"),
+  authorize(...ADMIN_ROLE_VALUES),
   [body("password").isLength({ min: 8 }).withMessage("Password must be at least 8 characters")],
   validate,
   adminController.resetAdminPassword
 );
 router.patch(
   "/admin-accounts/:id/transfer",
-  authorize("superadmin", "admin"),
+  authorize(...ADMIN_ROLE_VALUES),
   [body("organization").isObject().withMessage("Organization is required")],
   validate,
   adminController.transferAdminOrganization
 );
 router.post("/admin-accounts/:id/login-as", authorize("superadmin"), adminController.loginAsAdmin);
-router.get("/admin-accounts/:id/activity", authorize("superadmin", "admin"), adminController.getAdminActivity);
-router.delete("/admin-accounts/:id", authorize("superadmin", "admin"), adminController.deleteAdminAccount);
+router.get("/admin-accounts/:id/activity", authorize(...ADMIN_ROLE_VALUES), adminController.getAdminActivity);
+router.delete("/admin-accounts/:id", authorize(...ADMIN_ROLE_VALUES), adminController.deleteAdminAccount);
 router.get("/enterprise/search", adminController.globalEnterpriseSearch);
 router.get("/enterprise/organization/tree", adminController.getOrganizationTree);
 router.get("/enterprise/calendar/items", adminController.getEnterpriseCalendar);
@@ -271,7 +272,7 @@ router.patch(
 );
 router.delete("/enterprise-records/:id", adminController.deleteEnterpriseRecord);
 router.get("/super-config", authorize("superadmin"), adminController.getSuperAdminConfig);
-router.get("/super-config/role/:role", authorize("superadmin", "admin"), adminController.getRoleConfiguration);
+router.get("/super-config/role/:role", authorize(...ADMIN_ROLE_VALUES), adminController.getRoleConfiguration);
 router.get("/super-config/:section", authorize("superadmin"), adminController.getSuperAdminConfigSection);
 router.put(
   "/super-config/:section",
@@ -339,7 +340,7 @@ router.patch(
  *       403:
  *         description: Not authorized
  */
-router.post("/create-admin", authorize("superadmin", "admin"), adminController.createAdmin);
+router.post("/create-admin", authorize(...ADMIN_ROLE_VALUES), adminController.createAdmin);
 
 router.get("/banners", adminController.getBanners);
 router.post(

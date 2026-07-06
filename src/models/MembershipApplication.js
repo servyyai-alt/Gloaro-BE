@@ -16,7 +16,7 @@ const membershipApplicationSchema = new mongoose.Schema(
   {
     applicationNumber: { type: String, unique: true, sparse: true, immutable: true, trim: true, uppercase: true, index: true },
     step: { type: Number, default: 3 },
-    status: { type: String, enum: ["submitted", "documents_verified", "under_review", "approved", "rejected"], default: "submitted" },
+    status: { type: String, enum: ["draft", "submitted", "pending_review", "documents_verified", "under_review", "approved", "rejected"], default: "submitted" },
     agreement: {
       declarationsAccepted: [String],
       legalName: String,
@@ -78,6 +78,43 @@ const membershipApplicationSchema = new mongoose.Schema(
     reviewedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     reviewedAt: Date,
     adminNotes: String,
+
+    // Location-driven workflow fields
+    regionId: { type: mongoose.Schema.Types.ObjectId, ref: "EnterpriseRecord", index: true },
+    stateId: { type: mongoose.Schema.Types.ObjectId, ref: "EnterpriseRecord", index: true },
+    districtId: { type: mongoose.Schema.Types.ObjectId, ref: "EnterpriseRecord", index: true },
+    areaId: { type: mongoose.Schema.Types.ObjectId, ref: "EnterpriseRecord", index: true },
+    chapterId: { type: mongoose.Schema.Types.ObjectId, ref: "EnterpriseRecord", index: true },
+
+    // Assigned Officials
+    vicePresidentId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    chapterPresidentId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    directConsultantId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    launchDirectorId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    executiveDirectorId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    districtDirectorId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    stateDirectorId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    regionDirectorId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    assignedAdminId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+
+    // Approval Auditing
+    approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    approvedRole: String,
+    approvedAt: Date,
+    rejectionReason: String,
+
+    // Workflow History
+    workflowHistory: [
+      {
+        user: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+        role: String,
+        action: String,
+        remarks: String,
+        timestamp: { type: Date, default: Date.now },
+        previousStatus: String,
+        newStatus: String,
+      }
+    ],
   },
   { timestamps: true }
 );

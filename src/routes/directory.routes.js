@@ -125,6 +125,16 @@ router.get("/filters", directoryController.getDirectoryFilters);
  *       200:
  *         description: Global search results
  */
+const { protect } = require("../middleware/auth");
+
 router.get("/global-search", directoryController.globalSearch);
+router.get("/organization-hierarchy", directoryController.getOrganizationHierarchy);
+
+// Dynamic cascading locations
+router.get("/regions", protect, directoryController.getRegions);
+router.get("/states", protect, directoryController.getStates);
+router.get("/districts", protect, directoryController.getDistricts);
+router.get("/areas", protect, directoryController.getAreas);
+router.get("/chapters", protect, directoryController.getChapters);
 
 module.exports = router;

@@ -241,6 +241,11 @@ class IdGeneratorService {
     return `TKT-${this.pad(sequence, 6)}`;
   }
 
+  async generateOfficialId(metadata = {}) {
+    const sequence = await this.getNextSequence("official");
+    return `OFF-${this.pad(sequence, 6)}`;
+  }
+
   async generateEventTicketId(metadata = {}) {
     const eventCode = this.normalize(metadata.eventCode || metadata.eventId, "Event code");
     const sequence = await this.getNextSequence(`event_ticket:${eventCode}`);

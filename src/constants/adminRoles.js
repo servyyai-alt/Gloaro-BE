@@ -7,7 +7,9 @@ const ADMIN_ROLE_VALUES = [
   "digital_marketing_admin",
   "training_admin",
   "finance_admin",
+  "region_director",
   "state_director",
+  "district_director",
   "area_director",
   "executive_director",
   "launch_director",
@@ -15,6 +17,9 @@ const ADMIN_ROLE_VALUES = [
   "operation_vice_president",
   "membership_verification_admin",
   "custom_admin",
+  "chapter_president",
+  "vice_president",
+  "secretary",
 ];
 
 const ADMIN_ROLE_LABELS = {
@@ -26,7 +31,9 @@ const ADMIN_ROLE_LABELS = {
   digital_marketing_admin: "Digital Marketing Admin",
   training_admin: "Training Admin",
   finance_admin: "Finance Admin",
+  region_director: "Region Director",
   state_director: "State Director",
+  district_director: "District Director",
   area_director: "Area Director",
   executive_director: "Executive Director",
   launch_director: "Launch Director",
@@ -34,6 +41,9 @@ const ADMIN_ROLE_LABELS = {
   operation_vice_president: "Operation Vice President",
   membership_verification_admin: "Membership Verification Admin",
   custom_admin: "Custom Admin",
+  chapter_president: "Chapter President",
+  vice_president: "Vice President",
+  secretary: "Secretary",
 };
 
 const isAdminRole = (role) => ADMIN_ROLE_VALUES.includes(role);

@@ -7,6 +7,13 @@ const { AppError } = require("../middleware/errorHandler");
 const { setCache, deleteCache } = require("../config/redis");
 const idGenerator = require("./idGenerator.service");
 
+const getUserMeta = (user) => {
+  if (!user?.meta) return {};
+  if (typeof user.meta.toObject === "function") return user.meta.toObject();
+  if (user.meta instanceof Map) return Object.fromEntries(user.meta);
+  return user.meta;
+};
+
 class AuthService {
   async register(data) {
     const { name, email, phone, password, role = "customer", referralCode } = data;
@@ -79,7 +86,9 @@ class AuthService {
     user.lastLoginIp = ipAddress;
     await user.save({ validateBeforeSave: false });
 
-    return { user, accessToken, refreshToken };
+    const forcePasswordChange = Boolean(getUserMeta(user).adminProfile?.security?.forcePasswordChange);
+
+    return { user, accessToken, refreshToken, forcePasswordChange };
   }
 
   async logout(userId) {
@@ -150,6 +159,13 @@ class AuthService {
 
     user.password = newPassword;
     user.refreshToken = undefined; // Invalidate all sessions
+
+    const meta = getUserMeta(user);
+    if (meta.adminProfile?.security) {
+      meta.adminProfile.security.forcePasswordChange = false;
+      user.meta = meta;
+    }
+
     await user.save();
 
     return { message: "Password changed successfully" };

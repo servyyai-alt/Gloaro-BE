@@ -2,6 +2,7 @@ const authService = require("../services/auth.service");
 const { asyncHandler } = require("../middleware/errorHandler");
 const { setTokenCookies, clearTokenCookies } = require("../utils/jwt");
 const { successResponse } = require("../utils/response");
+const { populateUserOrganizationLocations } = require("../utils/userPopulateHelper");
 
 /**
  * @swagger
@@ -13,8 +14,9 @@ const { successResponse } = require("../utils/response");
 // @POST /api/v1/auth/register
 exports.register = asyncHandler(async (req, res) => {
   const result = await authService.register(req.body);
+  const populated = await populateUserOrganizationLocations([result.user]);
   successResponse(res, 201, result.message, {
-    user: sanitizeUser(result.user),
+    user: sanitizeUser(populated[0]),
   });
 });
 
@@ -25,8 +27,10 @@ exports.login = asyncHandler(async (req, res) => {
 
   setTokenCookies(res, result.accessToken, result.refreshToken);
 
+  const populated = await populateUserOrganizationLocations([result.user]);
+
   successResponse(res, 200, "Login successful", {
-    user: sanitizeUser(result.user),
+    user: sanitizeUser(populated[0]),
     accessToken: result.accessToken,
     refreshToken: result.refreshToken,
   });
@@ -91,11 +95,12 @@ exports.verifyOTP = asyncHandler(async (req, res) => {
 
 // @GET /api/v1/auth/me
 exports.getMe = asyncHandler(async (req, res) => {
-  successResponse(res, 200, "Profile retrieved", { user: sanitizeUser(req.user) });
+  const populated = await populateUserOrganizationLocations([req.user]);
+  successResponse(res, 200, "Profile retrieved", { user: sanitizeUser(populated[0]) });
 });
 
 const sanitizeUser = (user) => {
-  const u = user.toObject ? user.toObject() : user;
+  const u = user.toObject ? user.toObject({ flattenMaps: true }) : user;
   delete u.password;
   delete u.refreshToken;
   delete u.resetPasswordToken;
