@@ -3,6 +3,7 @@ const router = express.Router();
 const userController = require("../controllers/user.controller");
 const { protect, authorize } = require("../middleware/auth");
 const { uploadSingle } = require("../config/cloudinary");
+const { ADMIN_ROLE_VALUES } = require("../constants/adminRoles");
 
 // All routes require authentication
 router.use(protect);
@@ -127,7 +128,7 @@ router.get("/activity", async (req, res, next) => {
  *       403:
  *         description: Not authorized (admin only)
  */
-router.get("/", authorize("admin", "superadmin"), userController.getUsers);
+router.get("/", authorize(...ADMIN_ROLE_VALUES), userController.getUsers);
 
 /**
  * @swagger
@@ -149,7 +150,7 @@ router.get("/", authorize("admin", "superadmin"), userController.getUsers);
  *       404:
  *         description: User not found
  */
-router.get("/:id", authorize("admin", "superadmin"), userController.getUserById);
+router.get("/:id", authorize(...ADMIN_ROLE_VALUES), userController.getUserById);
 
 /**
  * @swagger
@@ -184,7 +185,7 @@ router.get("/:id", authorize("admin", "superadmin"), userController.getUserById)
  *       403:
  *         description: Not authorized
  */
-router.patch("/:id", authorize("admin", "superadmin"), uploadSingle("avatar", "avatars"), userController.updateUser);
+router.patch("/:id", authorize(...ADMIN_ROLE_VALUES), uploadSingle("avatar", "avatars"), userController.updateUser);
 
 /**
  * @swagger
@@ -205,7 +206,7 @@ router.patch("/:id", authorize("admin", "superadmin"), uploadSingle("avatar", "a
  *       403:
  *         description: Not authorized
  */
-router.delete("/:id", authorize("admin", "superadmin"), userController.deleteUser);
+router.delete("/:id", authorize(...ADMIN_ROLE_VALUES), userController.deleteUser);
 
 /**
  * @swagger
@@ -224,7 +225,7 @@ router.delete("/:id", authorize("admin", "superadmin"), userController.deleteUse
  *       200:
  *         description: User suspended successfully
  */
-router.patch("/:id/suspend", authorize("admin", "superadmin"), userController.suspendUser);
+router.patch("/:id/suspend", authorize(...ADMIN_ROLE_VALUES), userController.suspendUser);
 
 /**
  * @swagger
@@ -243,7 +244,7 @@ router.patch("/:id/suspend", authorize("admin", "superadmin"), userController.su
  *       200:
  *         description: User unsuspended successfully
  */
-router.patch("/:id/unsuspend", authorize("admin", "superadmin"), userController.unsuspendUser);
+router.patch("/:id/unsuspend", authorize(...ADMIN_ROLE_VALUES), userController.unsuspendUser);
 
 /**
  * @swagger
@@ -262,7 +263,7 @@ router.patch("/:id/unsuspend", authorize("admin", "superadmin"), userController.
  *       200:
  *         description: User blocked successfully
  */
-router.patch("/:id/block", authorize("admin", "superadmin"), userController.blockUser);
+router.patch("/:id/block", authorize(...ADMIN_ROLE_VALUES), userController.blockUser);
 
 /**
  * @swagger
@@ -281,7 +282,7 @@ router.patch("/:id/block", authorize("admin", "superadmin"), userController.bloc
  *       200:
  *         description: User unblocked successfully
  */
-router.patch("/:id/unblock", authorize("admin", "superadmin"), userController.unblockUser);
+router.patch("/:id/unblock", authorize(...ADMIN_ROLE_VALUES), userController.unblockUser);
 
 /**
  * @swagger
@@ -300,6 +301,6 @@ router.patch("/:id/unblock", authorize("admin", "superadmin"), userController.un
  *       200:
  *         description: Activity logs fetched successfully
  */
-router.get("/:id/activity", authorize("admin", "superadmin"), userController.getUserActivityLogs);
+router.get("/:id/activity", authorize(...ADMIN_ROLE_VALUES), userController.getUserActivityLogs);
 
 module.exports = router;

@@ -19,6 +19,24 @@ exports.getUsers = asyncHandler(async (req, res) => {
   if (status === "blocked") filter.isBlocked = true;
   if (search) filter.$or = [{ name: new RegExp(search, "i") }, { email: new RegExp(search, "i") }];
 
+  const caller = req.user;
+  const isGlobal = ["superadmin", "admin"].includes(caller?.role);
+  if (!isGlobal) {
+    const meta = caller.meta ? (typeof caller.meta.toObject === "function" ? caller.meta.toObject() : (caller.meta instanceof Map ? Object.fromEntries(caller.meta) : caller.meta)) : {};
+    const org = meta.adminProfile?.organization || {};
+    if (org.chapter) {
+      filter["meta.adminProfile.organization.chapter"] = org.chapter.toString();
+    } else if (org.district) {
+      filter["meta.adminProfile.organization.district"] = org.district.toString();
+    } else if (org.state) {
+      filter["meta.adminProfile.organization.state"] = org.state.toString();
+    } else if (org.region) {
+      filter["meta.adminProfile.organization.region"] = org.region.toString();
+    } else {
+      return paginatedResponse(res, [], page, limit, 0);
+    }
+  }
+
   const [users, total] = await Promise.all([
     User.find(filter).select("-password -refreshToken").sort("-createdAt").skip(skip).limit(limit),
     User.countDocuments(filter),
