@@ -63,7 +63,9 @@ const getAllSuperConfig = async () => {
 
 const getUserMeta = (user) => {
   if (!user?.meta) return {};
-  if (typeof user.meta.toObject === "function") return user.meta.toObject();
+  if (typeof user.toObject === "function") {
+    return user.toObject({ flattenMaps: true }).meta || {};
+  }
   if (user.meta instanceof Map) return Object.fromEntries(user.meta);
   return user.meta;
 };
@@ -926,11 +928,11 @@ exports.createAdminAccount = asyncHandler(async (req, res) => {
     state_director: ["district_director", "area_director"],
     district_director: ["executive_director"],
     area_director: ["executive_director"],
-    executive_director: ["launch_director"],
+    executive_director: ["chapter_president"],
     launch_director: ["direct_consultant"],
     direct_consultant: ["chapter_president"],
     chapter_president: ["vice_president"],
-    vice_president: ["secretary"],
+    vice_president: ["secretary", "customer"],
   };
 
   const allowedRoles = CREATION_HIERARCHY[creatorRole] || [];
@@ -991,6 +993,26 @@ exports.createAdminAccount = asyncHandler(async (req, res) => {
     });
     if (existingPresident) {
       throw new AppError("Only one Chapter President is allowed per Chapter.", 400);
+    }
+  }
+
+  if (role === "vice_president") {
+    const existingVP = await User.findOne({
+      role: "vice_president",
+      "meta.adminProfile.organization.chapter": childOrg.chapter?.toString()
+    });
+    if (existingVP) {
+      throw new AppError("Only one Vice President is allowed per Chapter.", 400);
+    }
+  }
+
+  if (role === "secretary") {
+    const existingSec = await User.findOne({
+      role: "secretary",
+      "meta.adminProfile.organization.chapter": childOrg.chapter?.toString()
+    });
+    if (existingSec) {
+      throw new AppError("Only one Secretary is allowed per Chapter.", 400);
     }
   }
 

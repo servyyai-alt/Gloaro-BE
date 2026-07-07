@@ -7,9 +7,22 @@ class SecretaryService {
   // scope dashboard queries using req.user.chapterId so Secretaries
   // only access data belonging to their assigned chapter.
   async getDashboardData(user) {
+    const meta = user.meta ? (typeof user.meta.toObject === "function" ? user.meta.toObject() : (user.meta instanceof Map ? Object.fromEntries(user.meta) : user.meta)) : {};
+    const profile = meta.adminProfile || {};
+    const org = profile.organization || {};
+    const chapterId = org.chapter;
+
+    const filter = { role: { $in: ["customer", "user"] } };
+    const activeFilter = { role: { $in: ["customer", "user"] }, isActive: true };
+
+    if (chapterId) {
+      filter["meta.adminProfile.organization.chapter"] = chapterId.toString();
+      activeFilter["meta.adminProfile.organization.chapter"] = chapterId.toString();
+    }
+
     const [totalMembers, activeMembers] = await Promise.all([
-      User.countDocuments({ role: { $in: ["customer", "user"] } }),
-      User.countDocuments({ role: { $in: ["customer", "user"] }, isActive: true })
+      User.countDocuments(filter),
+      User.countDocuments(activeFilter)
     ]);
 
     const upcomingMeetings = await Event.find({
@@ -45,13 +58,20 @@ class SecretaryService {
     };
   }
 
-  // TODO:
-  // When the Chapter Management module is implemented,
-  // scope all member queries and summary statistics using req.user.chapterId
+  // Scope all member queries and summary statistics using caller's chapter assignment
   // so each Secretary only accesses members, meetings, attendance, documents,
   // and reports belonging to their assigned chapter.
   async getMembersData(user, { page, limit, skip, search, status }) {
+    const meta = user.meta ? (typeof user.meta.toObject === "function" ? user.meta.toObject() : (user.meta instanceof Map ? Object.fromEntries(user.meta) : user.meta)) : {};
+    const profile = meta.adminProfile || {};
+    const org = profile.organization || {};
+    const chapterId = org.chapter;
+
     const filter = { role: { $in: ["customer", "user"] } };
+
+    if (chapterId) {
+      filter["meta.adminProfile.organization.chapter"] = chapterId.toString();
+    }
 
     const keyword = search?.trim();
     if (keyword) {
@@ -69,6 +89,11 @@ class SecretaryService {
       filter.isActive = false;
     }
 
+    const baseFilter = { role: { $in: ["customer", "user"] } };
+    if (chapterId) {
+      baseFilter["meta.adminProfile.organization.chapter"] = chapterId.toString();
+    }
+
     const [items, total, totalMembers, activeMembers, inactiveMembers] = await Promise.all([
       User.find(filter)
         .select("name email phone isActive createdAt")
@@ -76,9 +101,9 @@ class SecretaryService {
         .skip(skip)
         .limit(limit),
       User.countDocuments(filter),
-      User.countDocuments({ role: { $in: ["customer", "user"] } }),
-      User.countDocuments({ role: { $in: ["customer", "user"] }, isActive: true }),
-      User.countDocuments({ role: { $in: ["customer", "user"] }, isActive: false })
+      User.countDocuments(baseFilter),
+      User.countDocuments({ ...baseFilter, isActive: true }),
+      User.countDocuments({ ...baseFilter, isActive: false })
     ]);
 
     return {
