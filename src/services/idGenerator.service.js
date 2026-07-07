@@ -155,16 +155,16 @@ class IdGeneratorService {
 
   async generateMemberId(metadata = {}) {
     const stateCode = this.normalize(metadata.stateCode || metadata.state, "State code", { length: 2 });
-    const areaCode = this.normalize(metadata.areaCode || metadata.cityCode || metadata.area || metadata.city, "Area code", { length: 3 });
-    const sequence = await this.getNextSequence(`member:${stateCode}:${areaCode}`);
-    return `MBR-${stateCode}-${areaCode}-${this.pad(sequence, 6)}`;
+    const districtCode = this.normalize(metadata.districtCode || metadata.district || metadata.areaCode || metadata.area || metadata.cityCode || metadata.city, "District code", { length: 3 });
+    const sequence = await this.getNextSequence(`member:${stateCode}:${districtCode}`);
+    return `MEM-${stateCode}-${districtCode}-${this.pad(sequence, 6)}`;
   }
 
   async generateVendorId(metadata = {}) {
     const stateCode = this.normalize(metadata.stateCode || metadata.state, "State code", { length: 2 });
-    const areaCode = this.normalize(metadata.areaCode || metadata.cityCode || metadata.area || metadata.city, "Area code", { length: 3 });
-    const sequence = await this.getNextSequence(`vendor:${stateCode}:${areaCode}`);
-    return `VDR-${stateCode}-${areaCode}-${this.pad(sequence, 6)}`;
+    const districtCode = this.normalize(metadata.districtCode || metadata.district || metadata.areaCode || metadata.area || metadata.cityCode || metadata.city, "District code", { length: 3 });
+    const sequence = await this.getNextSequence(`vendor:${stateCode}:${districtCode}`);
+    return `VDR-${stateCode}-${districtCode}-${this.pad(sequence, 6)}`;
   }
 
   async generateVisitorId(metadata = {}) {
@@ -242,8 +242,32 @@ class IdGeneratorService {
   }
 
   async generateOfficialId(metadata = {}) {
-    const sequence = await this.getNextSequence("official");
-    return `OFF-${this.pad(sequence, 6)}`;
+    const role = metadata.role || "";
+    const rolePrefixes = {
+      region_director: "RD",
+      state_director: "SD",
+      district_director: "DD",
+      executive_director: "ED",
+      launch_director: "LD",
+      direct_consultant: "DC",
+      chapter_president: "CP",
+      vice_president: "VP",
+      secretary: "SEC"
+    };
+
+    const prefix = rolePrefixes[role] || "OFF";
+    let orgCode = "GLO";
+
+    if (prefix === "RD") {
+      orgCode = this.normalize(metadata.regionCode || metadata.region || "GLO", "Region Code", { length: 3 });
+    } else if (prefix === "SD") {
+      orgCode = this.normalize(metadata.stateCode || metadata.state || "GLO", "State Code", { length: 2 });
+    } else if (["DD", "ED", "LD", "DC", "CP", "VP", "SEC"].includes(prefix)) {
+      orgCode = this.normalize(metadata.districtCode || metadata.district || metadata.chapterCode || metadata.chapter || "GLO", "District/Chapter Code", { length: 3 });
+    }
+
+    const sequence = await this.getNextSequence(`official:${prefix}:${orgCode}`);
+    return `${prefix}-${orgCode}-${this.pad(sequence, 4)}`;
   }
 
   async generateEventTicketId(metadata = {}) {

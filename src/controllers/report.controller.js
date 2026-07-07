@@ -56,3 +56,28 @@ exports.getAnalyticsSummary = asyncHandler(async (req, res) => {
   const data = await reportService.getAnalyticsSummary(req.query);
   successResponse(res, 200, "Analytics summary", data);
 });
+
+exports.getOfficialReport = asyncHandler(async (req, res) => {
+  const data = await reportService.getOfficialReport(req.query);
+  successResponse(res, 200, "Official report", data);
+});
+
+exports.getAttendanceReport = asyncHandler(async (req, res) => {
+  const data = await reportService.getAttendanceReport(req.query);
+  successResponse(res, 200, "Attendance report", data);
+});
+
+exports.getMeetingReport = asyncHandler(async (req, res) => {
+  const data = await reportService.getMeetingReport(req.query);
+  successResponse(res, 200, "Meeting report", data);
+});
+
+exports.getPaymentReport = asyncHandler(async (req, res) => {
+  const data = await reportService.getPaymentReport(req.query);
+  successResponse(res, 200, "Payment report", data);
+});
+
+exports.getReferralReport = asyncHandler(async (req, res) => {
+  const data = await reportService.getReferralReport(req.query);
+  successResponse(res, 200, "Referral report", data);
+});

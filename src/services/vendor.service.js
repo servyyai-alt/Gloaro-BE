@@ -157,7 +157,7 @@ class VendorService {
   }
 
   async approveVendor(vendorId, adminId, action, reason) {
-    const vendor = await Vendor.findById(vendorId).populate("user", "email name");
+    const vendor = await Vendor.findById(vendorId).populate("user");
     if (!vendor) throw new AppError("Vendor not found", 404);
 
     vendor.status = action === "approve" ? "approved" : "rejected";
@@ -166,19 +166,24 @@ class VendorService {
     vendor.rejectedReason = action === "reject" ? reason : undefined;
     await vendor.save();
 
+    if (action === "approve" && vendor.user) {
+      vendor.user.role = "vendor";
+      await vendor.user.save({ validateBeforeSave: false });
+    }
+
     // Notify vendor user
-    await Notification.create({
-      recipient: vendor.user._id,
+    const notificationService = require("./notification.service");
+    await notificationService.sendNotification({
+      recipientId: vendor.user._id,
       type: action === "approve" ? "vendor_approved" : "vendor_rejected",
       title: action === "approve" ? "Vendor Account Approved" : "Vendor Application Rejected",
       message: action === "approve"
         ? "Congratulations! Your vendor account has been approved."
         : `Your vendor application was rejected. Reason: ${reason}`,
+      link: "/vendor/dashboard",
+      emailTemplate: action === "approve" ? "vendorApproved" : null,
+      emailParams: [vendor.businessName]
     });
-
-    if (action === "approve") {
-      await sendTemplateEmail(vendor.user.email, "vendorApproved", vendor.businessName);
-    }
 
     await deleteCache(`vendor:${vendorId}`);
     return vendor;

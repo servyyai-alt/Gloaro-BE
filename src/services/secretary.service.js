@@ -20,9 +20,13 @@ class SecretaryService {
       activeFilter["meta.adminProfile.organization.chapter"] = chapterId.toString();
     }
 
-    const [totalMembers, activeMembers] = await Promise.all([
+    const EnterpriseRecord = require("../models/EnterpriseRecord");
+    const [totalMembers, activeMembers, attendance, meetings, documents] = await Promise.all([
       User.countDocuments(filter),
-      User.countDocuments(activeFilter)
+      User.countDocuments(activeFilter),
+      EnterpriseRecord.countDocuments({ module: "attendance", chapter: chapterId }),
+      EnterpriseRecord.countDocuments({ module: "meeting", chapter: chapterId }),
+      EnterpriseRecord.countDocuments({ module: "document", chapter: chapterId })
     ]);
 
     const upcomingMeetings = await Event.find({
@@ -37,9 +41,9 @@ class SecretaryService {
       summary: {
         totalMembers,
         activeMembers,
-        pendingMinutes: 0,
-        attendanceRate: 0,
-        documentsUploaded: 0,
+        attendance,
+        meetings,
+        documents,
       },
       recentActivities: [],
       upcomingMeetings,

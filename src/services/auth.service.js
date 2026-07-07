@@ -50,8 +50,32 @@ class AuthService {
 
     try {
       await sendTemplateEmail(user.email, "emailVerification", user.name, token);
+      
+      const notificationService = require("./notification.service");
+      // Welcome Notification
+      await notificationService.sendNotification({
+        recipientId: user._id,
+        type: "user_created",
+        title: "Welcome to Gloaro",
+        message: `Welcome, ${user.name}! Your account has been created successfully.`,
+        link: "/profile",
+        emailTemplate: "welcome",
+        emailParams: [user.name]
+      });
+
+      // Admin alert
+      const admins = await User.find({ role: { $in: ["admin", "superadmin"] } }).select("_id");
+      if (admins.length > 0) {
+        await notificationService.sendBulkNotifications({
+          recipientIds: admins.map(a => a._id.toString()),
+          type: "user_created",
+          title: "New Account Registration",
+          message: `User ${user.name} (${user.email}) registered on the platform.`,
+          link: "/admin/users"
+        });
+      }
     } catch (_) {
-      // Don't fail registration if email fails
+      // Don't fail registration if notifications fail
     }
 
     return { user, message: "Registration successful. Please verify your email." };

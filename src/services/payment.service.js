@@ -204,12 +204,13 @@ class PaymentService {
     }
 
     // Notification
-    await Notification.create({
-      recipient: payment.user,
+    const notificationService = require("./notification.service");
+    await notificationService.sendNotification({
+      recipientId: payment.user,
       type: "payment_success",
       title: "Payment Successful",
       message: `Payment of ${payment.currency} ${payment.amount} was successful.`,
-      data: new Map([["paymentId", payment._id.toString()]]),
+      link: `/payments/${payment._id}`
     });
   }
 

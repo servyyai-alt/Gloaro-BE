@@ -16,7 +16,7 @@ const membershipApplicationSchema = new mongoose.Schema(
   {
     applicationNumber: { type: String, unique: true, sparse: true, immutable: true, trim: true, uppercase: true, index: true },
     step: { type: Number, default: 3 },
-    status: { type: String, enum: ["draft", "submitted", "pending_review", "documents_verified", "under_review", "approved", "rejected"], default: "submitted" },
+    status: { type: String, enum: ["draft", "submitted", "pending_review", "documents_verified", "under_review", "forwarded", "approved", "rejected"], default: "submitted" },
     agreement: {
       declarationsAccepted: [String],
       legalName: String,

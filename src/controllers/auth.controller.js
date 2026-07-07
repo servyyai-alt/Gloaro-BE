@@ -3,6 +3,7 @@ const { asyncHandler } = require("../middleware/errorHandler");
 const { setTokenCookies, clearTokenCookies } = require("../utils/jwt");
 const { successResponse } = require("../utils/response");
 const { populateUserOrganizationLocations } = require("../utils/userPopulateHelper");
+const AuditLog = require("../models/AuditLog");
 
 /**
  * @swagger
@@ -15,6 +16,21 @@ const { populateUserOrganizationLocations } = require("../utils/userPopulateHelp
 exports.register = asyncHandler(async (req, res) => {
   const result = await authService.register(req.body);
   const populated = await populateUserOrganizationLocations([result.user]);
+
+  await AuditLog.create({
+    user: result.user._id,
+    action: "register",
+    resource: "User",
+    resourceId: result.user._id,
+    details: {
+      email: result.user.email,
+      ipAddress: req.ip,
+      device: req.get("User-Agent")
+    },
+    ipAddress: req.ip,
+    userAgent: req.get("User-Agent")
+  });
+
   successResponse(res, 201, result.message, {
     user: sanitizeUser(populated[0]),
   });
@@ -29,6 +45,21 @@ exports.login = asyncHandler(async (req, res) => {
 
   const populated = await populateUserOrganizationLocations([result.user]);
 
+  await AuditLog.create({
+    user: result.user._id,
+    action: "login",
+    resource: "User",
+    resourceId: result.user._id,
+    details: {
+      email: result.user.email,
+      role: result.user.role,
+      ipAddress: req.ip,
+      device: req.get("User-Agent")
+    },
+    ipAddress: req.ip,
+    userAgent: req.get("User-Agent")
+  });
+
   successResponse(res, 200, "Login successful", {
     user: sanitizeUser(populated[0]),
     accessToken: result.accessToken,
@@ -40,6 +71,21 @@ exports.login = asyncHandler(async (req, res) => {
 exports.logout = asyncHandler(async (req, res) => {
   await authService.logout(req.user._id);
   clearTokenCookies(res);
+
+  await AuditLog.create({
+    user: req.user._id,
+    action: "logout",
+    resource: "User",
+    resourceId: req.user._id,
+    details: {
+      email: req.user.email,
+      ipAddress: req.ip,
+      device: req.get("User-Agent")
+    },
+    ipAddress: req.ip,
+    userAgent: req.get("User-Agent")
+  });
+
   successResponse(res, 200, "Logged out successfully");
 });
 
@@ -64,6 +110,23 @@ exports.forgotPassword = asyncHandler(async (req, res) => {
 // @POST /api/v1/auth/reset-password/:token
 exports.resetPassword = asyncHandler(async (req, res) => {
   const result = await authService.resetPassword(req.params.token, req.body.password);
+  
+  if (result.user) {
+    await AuditLog.create({
+      user: result.user._id,
+      action: "password_reset",
+      resource: "User",
+      resourceId: result.user._id,
+      details: {
+        email: result.user.email,
+        ipAddress: req.ip,
+        device: req.get("User-Agent")
+      },
+      ipAddress: req.ip,
+      userAgent: req.get("User-Agent")
+    });
+  }
+
   successResponse(res, 200, result.message);
 });
 
@@ -71,6 +134,21 @@ exports.resetPassword = asyncHandler(async (req, res) => {
 exports.changePassword = asyncHandler(async (req, res) => {
   const { currentPassword, newPassword } = req.body;
   const result = await authService.changePassword(req.user._id, currentPassword, newPassword);
+  
+  await AuditLog.create({
+    user: req.user._id,
+    action: "password_change",
+    resource: "User",
+    resourceId: req.user._id,
+    details: {
+      email: req.user.email,
+      ipAddress: req.ip,
+      device: req.get("User-Agent")
+    },
+    ipAddress: req.ip,
+    userAgent: req.get("User-Agent")
+  });
+
   clearTokenCookies(res);
   successResponse(res, 200, result.message);
 });

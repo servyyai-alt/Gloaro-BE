@@ -233,6 +233,72 @@ class ReportService {
     };
   }
 
+  async getOfficialReport(query = {}) {
+    const { from, to } = this._getDateRange(query);
+    const dateFilter = { createdAt: { $gte: from, $lte: to } };
+    const filter = { role: { $in: ["region_director", "state_director", "district_director", "executive_director", "launch_director", "direct_consultant", "chapter_president", "vice_president", "secretary"] }, ...dateFilter };
+    
+    const [total, byRole] = await Promise.all([
+      User.countDocuments(filter),
+      User.aggregate([{ $match: filter }, { $group: { _id: "$role", count: { $sum: 1 } } }])
+    ]);
+    return { total, byRole };
+  }
+
+  async getAttendanceReport(query = {}) {
+    const EnterpriseRecord = require("../models/EnterpriseRecord");
+    const { from, to } = this._getDateRange(query);
+    const filter = { module: "attendance", createdAt: { $gte: from, $lte: to } };
+    if (query.chapterId) filter.chapter = query.chapterId;
+
+    const [total, byStatus] = await Promise.all([
+      EnterpriseRecord.countDocuments(filter),
+      EnterpriseRecord.aggregate([{ $match: filter }, { $group: { _id: "$status", count: { $sum: 1 } } }])
+    ]);
+    return { total, byStatus };
+  }
+
+  async getMeetingReport(query = {}) {
+    const EnterpriseRecord = require("../models/EnterpriseRecord");
+    const { from, to } = this._getDateRange(query);
+    const filter = { module: "meeting", createdAt: { $gte: from, $lte: to } };
+    if (query.chapterId) filter.chapter = query.chapterId;
+
+    const [total, byType] = await Promise.all([
+      EnterpriseRecord.countDocuments(filter),
+      EnterpriseRecord.aggregate([{ $match: filter }, { $group: { _id: "$type", count: { $sum: 1 } } }])
+    ]);
+    return { total, byType };
+  }
+
+  async getPaymentReport(query = {}) {
+    const { from, to } = this._getDateRange(query);
+    const filter = { createdAt: { $gte: from, $lte: to } };
+    if (query.status) filter.status = query.status;
+
+    const [total, byStatus, byType, totalAmount] = await Promise.all([
+      Payment.countDocuments(filter),
+      Payment.aggregate([{ $match: filter }, { $group: { _id: "$status", count: { $sum: 1 } } }]),
+      Payment.aggregate([{ $match: filter }, { $group: { _id: "$type", count: { $sum: 1 } } }]),
+      Payment.aggregate([{ $match: { ...filter, status: "completed" } }, { $group: { _id: null, amount: { $sum: "$amount" } } }])
+    ]);
+    return { total, byStatus, byType, totalAmount: totalAmount[0]?.amount || 0 };
+  }
+
+  async getReferralReport(query = {}) {
+    const Referral = require("../models/Referral");
+    const { from, to } = this._getDateRange(query);
+    const filter = { createdAt: { $gte: from, $lte: to } };
+    if (query.status) filter.status = query.status;
+
+    const [total, byStatus, totalValue] = await Promise.all([
+      Referral.countDocuments(filter),
+      Referral.aggregate([{ $match: filter }, { $group: { _id: "$status", count: { $sum: 1 } } }]),
+      Referral.aggregate([{ $match: { ...filter, status: "converted" } }, { $group: { _id: null, value: { $sum: "$businessValue" } } }])
+    ]);
+    return { total, byStatus, totalValue: totalValue[0]?.value || 0 };
+  }
+
   _getDateRange(query) {
     const to = query.to ? new Date(query.to) : new Date();
     const from = query.from ? new Date(query.from) : moment(to).subtract(30, "days").toDate();
