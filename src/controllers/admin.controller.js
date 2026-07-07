@@ -905,28 +905,51 @@ exports.getAdminAccounts = asyncHandler(async (req, res) => {
 
   const caller = req.user;
 
-  if (filter.role === "customer" || req.query.role === "customer") {
-    if (caller?.role === "region_director") {
+  let locationFilter = {};
+  const isGlobal = ["superadmin", "admin"].includes(caller?.role);
+
+  if (!isGlobal) {
+    const meta = (caller.toObject ? caller.toObject({ flattenMaps: true }).meta : caller.meta) || {};
+    const org = meta.adminProfile?.organization || {};
+    
+    if (caller?.role === "region_director" && (filter.role === "customer" || req.query.role === "customer")) {
       return paginatedResponse(res, [], page, limit, 0, "Region Director cannot access member roster");
     }
 
-    const isGlobal = ["superadmin", "admin"].includes(caller?.role);
-    if (!isGlobal) {
-      const meta = (caller.toObject ? caller.toObject({ flattenMaps: true }).meta : caller.meta) || {};
-      const org = meta.adminProfile?.organization || {};
-      if (org.chapter) {
-        filter["meta.adminProfile.organization.chapter"] = org.chapter.toString();
-      } else if (org.district) {
-        filter["meta.adminProfile.organization.district"] = org.district.toString();
-      } else if (org.state) {
-        filter["meta.adminProfile.organization.state"] = org.state.toString();
-      } else if (org.region) {
-        filter["meta.adminProfile.organization.region"] = org.region.toString();
-      } else {
-        return paginatedResponse(res, [], page, limit, 0, "No organization assigned");
-      }
+    if (org.chapter) {
+      locationFilter = {
+        $or: [
+          { "meta.adminProfile.organization.chapter": org.chapter.toString() },
+          { "meta": { $exists: false } }
+        ]
+      };
+    } else if (org.district) {
+      locationFilter = {
+        $or: [
+          { "meta.adminProfile.organization.district": org.district.toString() },
+          { "meta": { $exists: false } }
+        ]
+      };
+    } else if (org.state) {
+      locationFilter = {
+        $or: [
+          { "meta.adminProfile.organization.state": org.state.toString() },
+          { "meta": { $exists: false } }
+        ]
+      };
+    } else if (org.region) {
+      locationFilter = {
+        $or: [
+          { "meta.adminProfile.organization.region": org.region.toString() },
+          { "meta": { $exists: false } }
+        ]
+      };
+    } else {
+      return paginatedResponse(res, [], page, limit, 0, "No organization assigned");
     }
+  }
 
+  if (filter.role === "customer" || req.query.role === "customer") {
     if (!["vice_president", "executive_director"].includes(req.user.role)) {
       filter.status = { $nin: ["pending_approval", "rejected"] };
     }
@@ -934,12 +957,24 @@ exports.getAdminAccounts = asyncHandler(async (req, res) => {
   if (req.query.status === "active") Object.assign(filter, { isActive: true, isSuspended: false, isBlocked: false });
   if (req.query.status === "suspended") filter.isSuspended = true;
   if (req.query.status === "blocked") filter.isBlocked = true;
+
+  let searchFilter = {};
   if (req.query.search) {
-    filter.$or = [
-      { name: new RegExp(req.query.search, "i") },
-      { email: new RegExp(req.query.search, "i") },
-      { phone: new RegExp(req.query.search, "i") },
-    ];
+    searchFilter = {
+      $or: [
+        { name: new RegExp(req.query.search, "i") },
+        { email: new RegExp(req.query.search, "i") },
+        { phone: new RegExp(req.query.search, "i") },
+      ]
+    };
+  }
+
+  const conditions = [];
+  if (Object.keys(locationFilter).length > 0) conditions.push(locationFilter);
+  if (Object.keys(searchFilter).length > 0) conditions.push(searchFilter);
+
+  if (conditions.length > 0) {
+    filter.$and = conditions;
   }
 
   const [admins, total] = await Promise.all([

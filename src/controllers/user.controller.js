@@ -17,8 +17,6 @@ exports.getUsers = asyncHandler(async (req, res) => {
   if (status === "active") filter.isActive = true;
   if (status === "suspended") filter.isSuspended = true;
   if (status === "blocked") filter.isBlocked = true;
-  if (search) filter.$or = [{ name: new RegExp(search, "i") }, { email: new RegExp(search, "i") }];
-
   const caller = req.user;
 
   if (caller?.role === "region_director") {
@@ -29,21 +27,60 @@ exports.getUsers = asyncHandler(async (req, res) => {
     }
   }
 
+  let locationFilter = {};
   const isGlobal = ["superadmin", "admin"].includes(caller?.role);
   if (!isGlobal) {
     const meta = (caller.toObject ? caller.toObject({ flattenMaps: true }).meta : caller.meta) || {};
     const org = meta.adminProfile?.organization || {};
     if (org.chapter) {
-      filter["meta.adminProfile.organization.chapter"] = org.chapter.toString();
+      locationFilter = {
+        $or: [
+          { "meta.adminProfile.organization.chapter": org.chapter.toString() },
+          { "meta": { $exists: false } }
+        ]
+      };
     } else if (org.district) {
-      filter["meta.adminProfile.organization.district"] = org.district.toString();
+      locationFilter = {
+        $or: [
+          { "meta.adminProfile.organization.district": org.district.toString() },
+          { "meta": { $exists: false } }
+        ]
+      };
     } else if (org.state) {
-      filter["meta.adminProfile.organization.state"] = org.state.toString();
+      locationFilter = {
+        $or: [
+          { "meta.adminProfile.organization.state": org.state.toString() },
+          { "meta": { $exists: false } }
+        ]
+      };
     } else if (org.region) {
-      filter["meta.adminProfile.organization.region"] = org.region.toString();
+      locationFilter = {
+        $or: [
+          { "meta.adminProfile.organization.region": org.region.toString() },
+          { "meta": { $exists: false } }
+        ]
+      };
     } else {
       return paginatedResponse(res, [], page, limit, 0);
     }
+  }
+
+  let searchFilter = {};
+  if (search) {
+    searchFilter = {
+      $or: [
+        { name: new RegExp(search, "i") },
+        { email: new RegExp(search, "i") }
+      ]
+    };
+  }
+
+  const conditions = [];
+  if (Object.keys(locationFilter).length > 0) conditions.push(locationFilter);
+  if (Object.keys(searchFilter).length > 0) conditions.push(searchFilter);
+
+  if (conditions.length > 0) {
+    filter.$and = conditions;
   }
 
   if (filter.role === "customer" || req.query.role === "customer") {
