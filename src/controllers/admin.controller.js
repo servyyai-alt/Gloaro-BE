@@ -225,7 +225,7 @@ exports.getDashboard = asyncHandler(async (req, res) => {
       filter.regionId = locationIds.regionId;
     } else if (role === "state_director") {
       filter.stateId = locationIds.stateId;
-    } else if (["executive_director", "district_director", "area_director"].includes(role)) {
+    } else if (["executive_director", "district_director"].includes(role)) {
       filter.districtId = locationIds.districtId;
     } else if (["launch_director", "direct_consultant", "chapter_president", "vice_president"].includes(role)) {
       filter.chapterId = locationIds.chapterId;
@@ -294,6 +294,63 @@ exports.getDashboard = asyncHandler(async (req, res) => {
     MembershipApplication.countDocuments({ ...appFilter, status: "approved" }),
   ]);
 
+  const roleStats = {};
+
+  if (isSuperOrAdmin) {
+    roleStats.totalRegions = await EnterpriseRecord.countDocuments({ module: "organization", type: "region" });
+    roleStats.totalStateDirectors = await User.countDocuments({ role: "state_director" });
+    roleStats.totalMembers = await User.countDocuments({ role: "customer" });
+    roleStats.pendingMemberships = await MembershipApplication.countDocuments({ status: "submitted" });
+    roleStats.approvedMemberships = await MembershipApplication.countDocuments({ status: "approved" });
+    roleStats.activeVendors = await Vendor.countDocuments({ status: "approved", isActive: true });
+  } else if (role === "region_director") {
+    const regionId = filter.regionId;
+    roleStats.totalStates = await EnterpriseRecord.countDocuments({ module: "organization", type: "state", parent: regionId });
+    const stateIds = await EnterpriseRecord.find({ module: "organization", type: "state", parent: regionId }).distinct("_id");
+    roleStats.totalDistricts = await EnterpriseRecord.countDocuments({ module: "organization", type: "district", parent: { $in: stateIds } });
+    roleStats.pendingMemberships = await MembershipApplication.countDocuments({ regionId, status: "submitted" });
+    roleStats.approvedMemberships = await MembershipApplication.countDocuments({ regionId, status: "approved" });
+  } else if (role === "state_director") {
+    const stateId = filter.stateId;
+    roleStats.totalDistricts = await EnterpriseRecord.countDocuments({ module: "organization", type: "district", parent: stateId });
+    const districtIds = await EnterpriseRecord.find({ module: "organization", type: "district", parent: stateId }).distinct("_id");
+    roleStats.totalChapters = await EnterpriseRecord.countDocuments({ module: "organization", type: "chapter", parent: { $in: districtIds } });
+    roleStats.pendingMemberships = await MembershipApplication.countDocuments({ stateId, status: "submitted" });
+  } else if (role === "district_director") {
+    const districtId = filter.districtId;
+    roleStats.totalChapters = await EnterpriseRecord.countDocuments({ module: "organization", type: "chapter", parent: districtId });
+    roleStats.executiveDirectors = await User.countDocuments({ role: "executive_director", "meta.adminProfile.organization.district": districtId?.toString() });
+    roleStats.pendingMemberships = await MembershipApplication.countDocuments({ districtId, status: "submitted" });
+  } else if (role === "executive_director") {
+    const districtId = filter.districtId;
+    const chapterId = filter.chapterId;
+    roleStats.launchDirectors = await User.countDocuments({ role: "launch_director", "meta.adminProfile.organization.district": districtId?.toString() });
+    roleStats.pendingMemberships = await MembershipApplication.countDocuments({ chapterId, status: "submitted" });
+    roleStats.approvedMemberships = await MembershipApplication.countDocuments({ chapterId, status: "approved" });
+  } else if (role === "launch_director") {
+    const chapterId = filter.chapterId;
+    roleStats.directConsultants = await User.countDocuments({ role: "direct_consultant", "meta.adminProfile.organization.chapter": chapterId?.toString() });
+    roleStats.activeChapters = await EnterpriseRecord.countDocuments({ module: "organization", type: "chapter", _id: chapterId, status: "active" });
+  } else if (role === "direct_consultant") {
+    const chapterId = filter.chapterId;
+    roleStats.chapterPresidents = await User.countDocuments({ role: "chapter_president", "meta.adminProfile.organization.chapter": chapterId?.toString() });
+    roleStats.pendingMemberships = await MembershipApplication.countDocuments({ chapterId, status: "submitted" });
+  } else if (role === "chapter_president") {
+    const chapterId = filter.chapterId;
+    roleStats.vicePresidents = await User.countDocuments({ role: "vice_president", "meta.adminProfile.organization.chapter": chapterId?.toString() });
+    roleStats.members = await User.countDocuments({ role: "customer", "meta.adminProfile.organization.chapter": chapterId?.toString() });
+  } else if (role === "vice_president") {
+    const chapterId = filter.chapterId;
+    roleStats.secretaries = await User.countDocuments({ role: "secretary", "meta.adminProfile.organization.chapter": chapterId?.toString() });
+    roleStats.registeredMembers = await User.countDocuments({ role: "customer", "meta.adminProfile.organization.chapter": chapterId?.toString(), isActive: true });
+    roleStats.pendingRegistrations = await MembershipApplication.countDocuments({ chapterId, status: "submitted" });
+  } else if (role === "secretary") {
+    const chapterId = filter.chapterId;
+    roleStats.attendance = await EnterpriseRecord.countDocuments({ module: "attendance", chapter: chapterId });
+    roleStats.meetings = await EnterpriseRecord.countDocuments({ module: "meeting", chapter: chapterId });
+    roleStats.documents = await EnterpriseRecord.countDocuments({ module: "document", chapter: chapterId });
+  }
+
   successResponse(res, 200, "Admin dashboard", {
     totalUsers, totalVendors, pendingVendors, activeVendors,
     verifiedVendors, servicesCount, productsCount, eventsCount,
@@ -309,6 +366,7 @@ exports.getDashboard = asyncHandler(async (req, res) => {
       underReview: underReviewApplications,
       finalApproval: finalApprovalApplications,
     },
+    roleStats,
   });
 });
 
@@ -660,6 +718,37 @@ exports.createEnterpriseRecord = asyncHandler(async (req, res) => {
     userAgent: req.get("User-Agent"),
   });
 
+  try {
+    if (module === "meeting" && record.chapter) {
+      const notificationService = require("../services/notification.service");
+      const members = await User.find({ "meta.adminProfile.organization.chapter": record.chapter.toString() }).select("_id email name");
+      if (members.length > 0) {
+        for (const member of members) {
+          await notificationService.sendNotification({
+            recipientId: member._id,
+            type: "meeting_created",
+            title: "New Chapter Meeting Scheduled",
+            message: `A new chapter meeting has been scheduled: ${record.name}.`,
+            link: "/meetings",
+            emailTemplate: "meetingInvitation",
+            emailParams: [record.name, record.metadata?.meetingDate || record.createdAt, record.metadata?.venue || "Chapter Meeting Hall"]
+          });
+        }
+      }
+    } else if (module === "attendance" && record.assignedTo) {
+      const notificationService = require("../services/notification.service");
+      await notificationService.sendNotification({
+        recipientId: record.assignedTo,
+        type: "attendance_submitted",
+        title: "Attendance Submitted",
+        message: `Your attendance status has been recorded: ${record.status || "present"}.`,
+        link: "/attendance"
+      });
+    }
+  } catch (notifErr) {
+    // Don't fail the record creation if notifications fail
+  }
+
   successResponse(res, 201, "Enterprise record created", record);
 });
 
@@ -915,7 +1004,9 @@ exports.createAdminAccount = asyncHandler(async (req, res) => {
   const body = normalizeAdminBody(req.body);
   const { name, email, phone, password, role = "admin" } = body;
 
-  if (!isAdminRole(role)) return res.status(400).json({ success: false, message: "Invalid admin role" });
+  console.log('[DEBUG] createAdminAccount received role:', role, typeof role);
+
+  if (!isAdminRole(role) && role !== "customer") return res.status(400).json({ success: false, message: "Invalid admin role: " + role });
 
   const existing = await User.findOne({ email });
   if (existing) return res.status(409).json({ success: false, message: "Email already registered" });
@@ -925,10 +1016,9 @@ exports.createAdminAccount = asyncHandler(async (req, res) => {
     superadmin: ["admin"],
     admin: ["region_director"],
     region_director: ["state_director"],
-    state_director: ["district_director", "area_director"],
+    state_director: ["district_director"],
     district_director: ["executive_director"],
-    area_director: ["executive_director"],
-    executive_director: ["chapter_president"],
+    executive_director: ["launch_director"],
     launch_director: ["direct_consultant"],
     direct_consultant: ["chapter_president"],
     chapter_president: ["vice_president"],
@@ -1037,7 +1127,17 @@ exports.createAdminAccount = asyncHandler(async (req, res) => {
   }
 
   // 4. Generate unique Official ID and temporary credentials
-  const officialId = await idGenerator.generateOfficialId();
+  const stateRecord = childOrg.state ? await EnterpriseRecord.findById(childOrg.state) : null;
+  const regionRecord = childOrg.region ? await EnterpriseRecord.findById(childOrg.region) : null;
+  const districtRecord = childOrg.district ? await EnterpriseRecord.findById(childOrg.district) : null;
+  const chapterRecord = childOrg.chapter ? await EnterpriseRecord.findById(childOrg.chapter) : null;
+
+  const officialId = await idGenerator.generateOfficialId({
+    role,
+    regionCode: regionRecord?.code || regionRecord?.name,
+    stateCode: stateRecord?.code || stateRecord?.name,
+    districtCode: districtRecord?.code || districtRecord?.name || chapterRecord?.code || chapterRecord?.name
+  });
   const tempPassword = password || Math.random().toString(36).slice(-8) + "Aa1!";
 
   const admin = new User({
@@ -1102,13 +1202,13 @@ exports.createAdminAccount = asyncHandler(async (req, res) => {
 exports.updateAdminAccount = asyncHandler(async (req, res) => {
   const body = normalizeAdminBody(req.body);
   const admin = await User.findById(req.params.id).select("+password");
-  if (!admin || !isAdminRole(admin.role)) return res.status(404).json({ success: false, message: "Admin account not found" });
+  if (!admin || (!isAdminRole(admin.role) && admin.role !== "customer")) return res.status(404).json({ success: false, message: "Admin account not found" });
   const before = admin.toObject();
   const allowed = ["name", "phone", "role", "isActive", "isSuspended", "isBlocked"];
   allowed.forEach((field) => {
     if (body[field] !== undefined) admin[field] = body[field];
   });
-  if (body.role && !isAdminRole(body.role)) return res.status(400).json({ success: false, message: "Invalid admin role" });
+  if (body.role && !isAdminRole(body.role) && body.role !== "customer") return res.status(400).json({ success: false, message: "Invalid admin role: " + body.role });
   if (req.file) admin.avatar = { url: req.file.path, publicId: req.file.filename };
   applyAdminProfile(admin, buildAdminProfile({ ...getUserMeta(admin).adminProfile, ...body }));
   await admin.save();
@@ -1133,7 +1233,7 @@ exports.cloneAdminAccount = asyncHandler(async (req, res) => {
   }
 
   const source = await User.findById(req.params.id);
-  if (!source || !isAdminRole(source.role)) return res.status(404).json({ success: false, message: "Admin account not found" });
+  if (!source || (!isAdminRole(source.role) && source.role !== "customer")) return res.status(404).json({ success: false, message: "Admin account not found" });
   const { name, email, phone, password } = req.body;
   const existing = await User.findOne({ email });
   if (existing) return res.status(409).json({ success: false, message: "Email already registered" });
@@ -1154,7 +1254,7 @@ exports.cloneAdminAccount = asyncHandler(async (req, res) => {
 exports.updateAdminAccountStatus = asyncHandler(async (req, res) => {
   const { action } = req.body;
   const admin = await User.findById(req.params.id);
-  if (!admin || !isAdminRole(admin.role)) return res.status(404).json({ success: false, message: "Admin account not found" });
+  if (!admin || (!isAdminRole(admin.role) && admin.role !== "customer")) return res.status(404).json({ success: false, message: "Admin account not found" });
   const before = { isActive: admin.isActive, isSuspended: admin.isSuspended, isBlocked: admin.isBlocked };
   if (action === "suspend") Object.assign(admin, { isSuspended: true, suspendedAt: new Date(), suspendedReason: req.body.reason });
   if (action === "activate") Object.assign(admin, { isActive: true, isSuspended: false, isBlocked: false, suspendedReason: undefined, blockedReason: undefined });
@@ -1178,7 +1278,7 @@ exports.updateAdminAccountStatus = asyncHandler(async (req, res) => {
 
 exports.resetAdminPassword = asyncHandler(async (req, res) => {
   const admin = await User.findById(req.params.id).select("+password");
-  if (!admin || !isAdminRole(admin.role)) return res.status(404).json({ success: false, message: "Admin account not found" });
+  if (!admin || (!isAdminRole(admin.role) && admin.role !== "customer")) return res.status(404).json({ success: false, message: "Admin account not found" });
   admin.password = req.body.password;
   const meta = getUserMeta(admin);
   admin.meta = { ...meta, adminProfile: { ...(meta.adminProfile || {}), security: { ...(meta.adminProfile?.security || {}), forcePasswordChange: true } } };
@@ -1189,7 +1289,7 @@ exports.resetAdminPassword = asyncHandler(async (req, res) => {
 
 exports.deleteAdminAccount = asyncHandler(async (req, res) => {
   const admin = await User.findById(req.params.id);
-  if (!admin || !isAdminRole(admin.role)) return res.status(404).json({ success: false, message: "Admin account not found" });
+  if (!admin || (!isAdminRole(admin.role) && admin.role !== "customer")) return res.status(404).json({ success: false, message: "Admin account not found" });
   if (admin.role === "superadmin") return res.status(400).json({ success: false, message: "Super admin accounts cannot be deleted here" });
   await User.findByIdAndDelete(admin._id);
   await AuditLog.create({ user: req.user._id, action: "admin_deleted", resource: "User", resourceId: admin._id, details: { before: admin.toObject() }, ipAddress: req.ip, userAgent: req.get("User-Agent") });
@@ -1198,7 +1298,7 @@ exports.deleteAdminAccount = asyncHandler(async (req, res) => {
 
 exports.loginAsAdmin = asyncHandler(async (req, res) => {
   const admin = await User.findById(req.params.id);
-  if (!admin || !isAdminRole(admin.role)) return res.status(404).json({ success: false, message: "Admin account not found" });
+  if (!admin || (!isAdminRole(admin.role) && admin.role !== "customer")) return res.status(404).json({ success: false, message: "Admin account not found" });
   const accessToken = generateAccessToken(admin._id, admin.role);
   const refreshToken = generateRefreshToken(admin._id);
   admin.refreshToken = refreshToken;
@@ -1218,7 +1318,7 @@ exports.loginAsAdmin = asyncHandler(async (req, res) => {
 
 exports.transferAdminOrganization = asyncHandler(async (req, res) => {
   const admin = await User.findById(req.params.id);
-  if (!admin || !isAdminRole(admin.role)) return res.status(404).json({ success: false, message: "Admin account not found" });
+  if (!admin || (!isAdminRole(admin.role) && admin.role !== "customer")) return res.status(404).json({ success: false, message: "Admin account not found" });
   const meta = getUserMeta(admin);
   const before = meta.adminProfile?.organization;
   admin.meta = {

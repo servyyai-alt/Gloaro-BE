@@ -1,5 +1,6 @@
 const EnterpriseRecord = require("../models/EnterpriseRecord");
 const { AppError, asyncHandler } = require("../middleware/errorHandler");
+const AuditLog = require("../models/AuditLog");
 
 const getUserMeta = (user) => {
   if (!user?.meta) return {};
@@ -90,6 +91,19 @@ exports.getLocations = asyncHandler(async (req, res) => {
     .populate("parent", "name code type")
     .sort("type name")
     .lean();
+
+  if (req.query.export === "csv") {
+    const { exportToCSV } = require("../utils/csv");
+    return exportToCSV(res, locations, [
+      { label: "Name", key: "name" },
+      { label: "Code", key: "code" },
+      { label: "Level Type", key: "type" },
+      { label: "Parent Name", key: "parent.name" },
+      { label: "Parent Code", key: "parent.code" },
+      { label: "Status", key: "status" },
+      { label: "Created At", key: "createdAt" }
+    ], "locations.csv");
+  }
 
   res.status(200).json({
     success: true,
@@ -338,6 +352,22 @@ exports.createLocation = asyncHandler(async (req, res) => {
     status
   });
 
+  await AuditLog.create({
+    user: req.user._id,
+    action: "location_created",
+    resource: "EnterpriseRecord",
+    resourceId: newLocation._id,
+    details: {
+      type,
+      name: name.trim(),
+      code: code ? code.toUpperCase() : undefined,
+      ipAddress: req.ip,
+      device: req.get("User-Agent")
+    },
+    ipAddress: req.ip,
+    userAgent: req.get("User-Agent")
+  });
+
   res.status(201).json({
     success: true,
     message: "Location created successfully",
@@ -392,6 +422,23 @@ exports.updateLocation = asyncHandler(async (req, res) => {
   }
 
   await location.save();
+
+  await AuditLog.create({
+    user: req.user._id,
+    action: "location_updated",
+    resource: "EnterpriseRecord",
+    resourceId: location._id,
+    details: {
+      type: location.type,
+      name: location.name,
+      code: location.code,
+      status: location.status,
+      ipAddress: req.ip,
+      device: req.get("User-Agent")
+    },
+    ipAddress: req.ip,
+    userAgent: req.get("User-Agent")
+  });
 
   res.status(200).json({
     success: true,

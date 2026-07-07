@@ -1,6 +1,7 @@
 const vendorService = require("../services/vendor.service");
 const { asyncHandler } = require("../middleware/errorHandler");
 const { successResponse, paginatedResponse } = require("../utils/response");
+const AuditLog = require("../models/AuditLog");
 
 exports.createVendor = asyncHandler(async (req, res) => {
   const vendor = await vendorService.createVendor(req.user._id, req.body, req.files);
@@ -8,6 +9,22 @@ exports.createVendor = asyncHandler(async (req, res) => {
 });
 
 exports.getVendors = asyncHandler(async (req, res) => {
+  if (req.query.export === "csv") {
+    const { vendors } = await vendorService.getVendors({ ...req.query, limit: 100000, page: 1 });
+    const { exportToCSV } = require("../utils/csv");
+    return exportToCSV(res, vendors, [
+      { label: "Business Name", key: "businessName" },
+      { label: "Email", key: "user.email" },
+      { label: "Owner Name", key: "user.name" },
+      { label: "Plan", key: "membership.plan" },
+      { label: "Status", key: "status" },
+      { label: "Verified", key: "isVerified" },
+      { label: "City", key: "address.city" },
+      { label: "State", key: "address.state" },
+      { label: "Created At", key: "createdAt" }
+    ], "vendors.csv");
+  }
+
   const { vendors, total, page, limit } = await vendorService.getVendors(req.query);
   paginatedResponse(res, vendors, page, limit, total, "Vendors retrieved");
 });
@@ -32,6 +49,22 @@ exports.updateVendor = asyncHandler(async (req, res) => {
 exports.approveVendor = asyncHandler(async (req, res) => {
   const { action, reason } = req.body;
   const vendor = await vendorService.approveVendor(req.params.id, req.user._id, action, reason);
+
+  await AuditLog.create({
+    user: req.user._id,
+    action: `vendor_${action}`,
+    resource: "Vendor",
+    resourceId: vendor._id,
+    details: {
+      action,
+      reason,
+      ipAddress: req.ip,
+      device: req.get("User-Agent")
+    },
+    ipAddress: req.ip,
+    userAgent: req.get("User-Agent")
+  });
+
   successResponse(res, 200, `Vendor ${action}d successfully`, vendor);
 });
 

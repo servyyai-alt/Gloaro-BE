@@ -11,7 +11,7 @@ const compactObject = (data) => Object.fromEntries(
 
 exports.getUsers = asyncHandler(async (req, res) => {
   const { page, limit, skip } = getPagination(req.query);
-  const { role, status, search } = req.query;
+  const { role, status, search, export: exportFormat } = req.query;
   const filter = {};
   if (role) filter.role = role;
   if (status === "active") filter.isActive = true;
@@ -35,6 +35,24 @@ exports.getUsers = asyncHandler(async (req, res) => {
     } else {
       return paginatedResponse(res, [], page, limit, 0);
     }
+  }
+
+  if (exportFormat === "csv") {
+    const users = await User.find(filter).select("-password -refreshToken").sort("-createdAt").lean();
+    const populatedUsers = await populateUserOrganizationLocations(users);
+    const { exportToCSV } = require("../utils/csv");
+    return exportToCSV(res, populatedUsers, [
+      { label: "Name", key: "name" },
+      { label: "Email", key: "email" },
+      { label: "Role", key: "role" },
+      { label: "Phone", key: "phone" },
+      { label: "Status", key: "isActive" },
+      { label: "Suspended", key: "isSuspended" },
+      { label: "Blocked", key: "isBlocked" },
+      { label: "Member ID", key: "memberId" },
+      { label: "Official ID", key: "officialId" },
+      { label: "Created At", key: "createdAt" }
+    ], "users.csv");
   }
 
   const [users, total] = await Promise.all([
@@ -64,9 +82,30 @@ exports.updateUser = asyncHandler(async (req, res) => {
   const updateData = compactObject({ name, phone, address, preferences, role, isActive });
   if (req.file) updateData.avatar = { url: req.file.path, publicId: req.file.filename };
 
+  const existingUser = await User.findById(req.params.id);
+  if (!existingUser) throw new AppError("User not found", 404);
+
+  const roleChanged = role && role !== existingUser.role;
+
   const user = await User.findByIdAndUpdate(req.params.id, updateData, { new: true, runValidators: true })
     .select("-password -refreshToken");
-  if (!user) throw new AppError("User not found", 404);
+
+  await AuditLog.create({
+    user: req.user._id,
+    action: roleChanged ? "role_changes" : "user_update",
+    resource: "User",
+    resourceId: user._id,
+    details: {
+      previousRole: existingUser.role,
+      newRole: user.role,
+      updatedFields: Object.keys(updateData),
+      ipAddress: req.ip,
+      device: req.get("User-Agent")
+    },
+    ipAddress: req.ip,
+    userAgent: req.get("User-Agent")
+  });
+
   successResponse(res, 200, "User updated", user);
 });
 
@@ -78,12 +117,42 @@ exports.updateProfile = asyncHandler(async (req, res) => {
     updateData.avatar = { url: req.file.path, publicId: req.file.filename };
   }
   const user = await User.findByIdAndUpdate(req.user._id, updateData, { new: true, runValidators: true }).select("-password -refreshToken");
+
+  await AuditLog.create({
+    user: req.user._id,
+    action: "user_update",
+    resource: "User",
+    resourceId: user._id,
+    details: {
+      updatedFields: Object.keys(updateData),
+      ipAddress: req.ip,
+      device: req.get("User-Agent")
+    },
+    ipAddress: req.ip,
+    userAgent: req.get("User-Agent")
+  });
+
   successResponse(res, 200, "Profile updated", user);
 });
 
 exports.deleteUser = asyncHandler(async (req, res) => {
   const user = await User.findByIdAndDelete(req.params.id);
   if (!user) throw new AppError("User not found", 404);
+
+  await AuditLog.create({
+    user: req.user._id,
+    action: "user_delete",
+    resource: "User",
+    resourceId: user._id,
+    details: {
+      deletedUser: user.email,
+      ipAddress: req.ip,
+      device: req.get("User-Agent")
+    },
+    ipAddress: req.ip,
+    userAgent: req.get("User-Agent")
+  });
+
   successResponse(res, 200, "User deleted");
 });
 
@@ -93,6 +162,22 @@ exports.suspendUser = asyncHandler(async (req, res) => {
     isSuspended: true, suspendedReason: reason, suspendedAt: new Date(),
   }, { new: true }).select("-password");
   if (!user) throw new AppError("User not found", 404);
+
+  await AuditLog.create({
+    user: req.user._id,
+    action: "user_suspend",
+    resource: "User",
+    resourceId: user._id,
+    details: {
+      suspendedUser: user.email,
+      reason,
+      ipAddress: req.ip,
+      device: req.get("User-Agent")
+    },
+    ipAddress: req.ip,
+    userAgent: req.get("User-Agent")
+  });
+
   successResponse(res, 200, "User suspended", user);
 });
 
@@ -101,6 +186,21 @@ exports.unsuspendUser = asyncHandler(async (req, res) => {
     isSuspended: false, $unset: { suspendedReason: 1, suspendedAt: 1 }
   }, { new: true }).select("-password");
   if (!user) throw new AppError("User not found", 404);
+
+  await AuditLog.create({
+    user: req.user._id,
+    action: "user_unsuspend",
+    resource: "User",
+    resourceId: user._id,
+    details: {
+      unsuspendedUser: user.email,
+      ipAddress: req.ip,
+      device: req.get("User-Agent")
+    },
+    ipAddress: req.ip,
+    userAgent: req.get("User-Agent")
+  });
+
   successResponse(res, 200, "User unsuspended", user);
 });
 
@@ -110,6 +210,22 @@ exports.blockUser = asyncHandler(async (req, res) => {
     isBlocked: true, blockedReason: reason, blockedAt: new Date(),
   }, { new: true }).select("-password");
   if (!user) throw new AppError("User not found", 404);
+
+  await AuditLog.create({
+    user: req.user._id,
+    action: "user_block",
+    resource: "User",
+    resourceId: user._id,
+    details: {
+      blockedUser: user.email,
+      reason,
+      ipAddress: req.ip,
+      device: req.get("User-Agent")
+    },
+    ipAddress: req.ip,
+    userAgent: req.get("User-Agent")
+  });
+
   successResponse(res, 200, "User blocked", user);
 });
 
@@ -118,6 +234,21 @@ exports.unblockUser = asyncHandler(async (req, res) => {
     isBlocked: false, $unset: { blockedReason: 1, blockedAt: 1 }
   }, { new: true }).select("-password");
   if (!user) throw new AppError("User not found", 404);
+
+  await AuditLog.create({
+    user: req.user._id,
+    action: "user_unblock",
+    resource: "User",
+    resourceId: user._id,
+    details: {
+      unblockedUser: user.email,
+      ipAddress: req.ip,
+      device: req.get("User-Agent")
+    },
+    ipAddress: req.ip,
+    userAgent: req.get("User-Agent")
+  });
+
   successResponse(res, 200, "User unblocked", user);
 });
 

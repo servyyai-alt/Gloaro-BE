@@ -102,7 +102,7 @@ const resolveOfficials = async (hierarchy) => {
   // Resolve District Director
   let districtDirectorId = district.director || district.metadata?.districtDirector;
   if (!districtDirectorId) {
-    districtDirectorId = await findOfficialByRoleAndLocation(["district_director", "area_director"], "district", district);
+    districtDirectorId = await findOfficialByRoleAndLocation("district_director", "district", district);
   }
 
   // Resolve State Director
