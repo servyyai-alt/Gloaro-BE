@@ -18,6 +18,7 @@ const userSchema = new mongoose.Schema(
     password: { type: String, required: [true, "Password is required"], minlength: 8, select: false },
 
     role: { type: String, enum: [...ADMIN_ROLE_VALUES,"superadmin", "admin", "vendor", "user", "customer", "secretary"], default: "customer" },
+    status: { type: String, enum: ["pending_approval", "approved", "rejected"], default: "approved" },
 
     avatar: { url: String, publicId: String },
     isActive: { type: Boolean, default: true },

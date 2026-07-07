@@ -20,9 +20,18 @@ exports.getUsers = asyncHandler(async (req, res) => {
   if (search) filter.$or = [{ name: new RegExp(search, "i") }, { email: new RegExp(search, "i") }];
 
   const caller = req.user;
+
+  if (caller?.role === "region_director") {
+    if (filter.role === "customer" || req.query.role === "customer") {
+      return paginatedResponse(res, [], page, limit, 0, "Region Director cannot access member roster");
+    } else if (!filter.role) {
+      filter.role = { $ne: "customer" };
+    }
+  }
+
   const isGlobal = ["superadmin", "admin"].includes(caller?.role);
   if (!isGlobal) {
-    const meta = caller.meta ? (typeof caller.meta.toObject === "function" ? caller.meta.toObject() : (caller.meta instanceof Map ? Object.fromEntries(caller.meta) : caller.meta)) : {};
+    const meta = (caller.toObject ? caller.toObject({ flattenMaps: true }).meta : caller.meta) || {};
     const org = meta.adminProfile?.organization || {};
     if (org.chapter) {
       filter["meta.adminProfile.organization.chapter"] = org.chapter.toString();
@@ -35,6 +44,17 @@ exports.getUsers = asyncHandler(async (req, res) => {
     } else {
       return paginatedResponse(res, [], page, limit, 0);
     }
+  }
+
+  if (filter.role === "customer" || req.query.role === "customer") {
+    if (!["vice_president", "executive_director"].includes(req.user.role)) {
+      filter.status = { $nin: ["pending_approval", "rejected"] };
+    }
+  } else if (!filter.role) {
+    filter.$or = [
+      { role: { $ne: "customer" } },
+      { status: { $nin: ["pending_approval", "rejected"] } }
+    ];
   }
 
   const [users, total] = await Promise.all([

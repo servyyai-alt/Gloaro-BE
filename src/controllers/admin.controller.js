@@ -188,6 +188,14 @@ exports.getDashboard = asyncHandler(async (req, res) => {
 
   const filter = {};
   const userFilter = { role: { $ne: "superadmin" } };
+  if (role === "region_director") {
+    userFilter.role = { $nin: ["superadmin", "customer"] };
+  } else {
+    userFilter.$or = [
+      { role: { $ne: "customer" } },
+      { status: { $nin: ["pending_approval", "rejected"] } }
+    ];
+  }
   const vendorFilter = {};
   const appFilter = {};
 
@@ -888,8 +896,41 @@ exports.getEnterpriseAnalytics = asyncHandler(async (req, res) => {
 
 exports.getAdminAccounts = asyncHandler(async (req, res) => {
   const { page, limit, skip } = getPagination(req.query);
-  const filter = { role: { $in: ADMIN_ROLE_VALUES } };
-  if (req.query.role) filter.role = req.query.role;
+  const filter = {};
+  if (req.query.role) {
+    filter.role = req.query.role;
+  } else {
+    filter.role = { $in: ADMIN_ROLE_VALUES };
+  }
+
+  const caller = req.user;
+
+  if (filter.role === "customer" || req.query.role === "customer") {
+    if (caller?.role === "region_director") {
+      return paginatedResponse(res, [], page, limit, 0, "Region Director cannot access member roster");
+    }
+
+    const isGlobal = ["superadmin", "admin"].includes(caller?.role);
+    if (!isGlobal) {
+      const meta = (caller.toObject ? caller.toObject({ flattenMaps: true }).meta : caller.meta) || {};
+      const org = meta.adminProfile?.organization || {};
+      if (org.chapter) {
+        filter["meta.adminProfile.organization.chapter"] = org.chapter.toString();
+      } else if (org.district) {
+        filter["meta.adminProfile.organization.district"] = org.district.toString();
+      } else if (org.state) {
+        filter["meta.adminProfile.organization.state"] = org.state.toString();
+      } else if (org.region) {
+        filter["meta.adminProfile.organization.region"] = org.region.toString();
+      } else {
+        return paginatedResponse(res, [], page, limit, 0, "No organization assigned");
+      }
+    }
+
+    if (!["vice_president", "executive_director"].includes(req.user.role)) {
+      filter.status = { $nin: ["pending_approval", "rejected"] };
+    }
+  }
   if (req.query.status === "active") Object.assign(filter, { isActive: true, isSuspended: false, isBlocked: false });
   if (req.query.status === "suspended") filter.isSuspended = true;
   if (req.query.status === "blocked") filter.isBlocked = true;
@@ -915,7 +956,7 @@ exports.createAdminAccount = asyncHandler(async (req, res) => {
   const body = normalizeAdminBody(req.body);
   const { name, email, phone, password, role = "admin" } = body;
 
-  if (!isAdminRole(role)) return res.status(400).json({ success: false, message: "Invalid admin role" });
+  if (!isAdminRole(role) && role !== "customer") return res.status(400).json({ success: false, message: "Invalid admin role" });
 
   const existing = await User.findOne({ email });
   if (existing) return res.status(409).json({ success: false, message: "Email already registered" });
@@ -1049,6 +1090,7 @@ exports.createAdminAccount = asyncHandler(async (req, res) => {
     officialId,
     avatar: req.file ? { url: req.file.path, publicId: req.file.filename } : undefined,
     isEmailVerified: true,
+    status: role === "customer" ? "pending_approval" : "approved",
   });
 
   // Force password change on first login
@@ -1154,12 +1196,16 @@ exports.cloneAdminAccount = asyncHandler(async (req, res) => {
 exports.updateAdminAccountStatus = asyncHandler(async (req, res) => {
   const { action } = req.body;
   const admin = await User.findById(req.params.id);
-  if (!admin || !isAdminRole(admin.role)) return res.status(404).json({ success: false, message: "Admin account not found" });
-  const before = { isActive: admin.isActive, isSuspended: admin.isSuspended, isBlocked: admin.isBlocked };
+  if (!admin || (!isAdminRole(admin.role) && admin.role !== "customer")) {
+    return res.status(404).json({ success: false, message: "Account not found" });
+  }
+  const before = { isActive: admin.isActive, isSuspended: admin.isSuspended, isBlocked: admin.isBlocked, status: admin.status };
   if (action === "suspend") Object.assign(admin, { isSuspended: true, suspendedAt: new Date(), suspendedReason: req.body.reason });
   if (action === "activate") Object.assign(admin, { isActive: true, isSuspended: false, isBlocked: false, suspendedReason: undefined, blockedReason: undefined });
   if (action === "lock") Object.assign(admin, { isBlocked: true, blockedAt: new Date(), blockedReason: req.body.reason });
   if (action === "unlock") Object.assign(admin, { isBlocked: false, blockedReason: undefined, loginAttempts: 0, lockUntil: undefined });
+  if (action === "approve") Object.assign(admin, { status: "approved" });
+  if (action === "reject") Object.assign(admin, { status: "rejected" });
   await admin.save();
 
   await AuditLog.create({
@@ -1167,13 +1213,13 @@ exports.updateAdminAccountStatus = asyncHandler(async (req, res) => {
     action: `admin_${action}`,
     resource: "User",
     resourceId: admin._id,
-    details: { before, after: { isActive: admin.isActive, isSuspended: admin.isSuspended, isBlocked: admin.isBlocked } },
+    details: { before, after: { isActive: admin.isActive, isSuspended: admin.isSuspended, isBlocked: admin.isBlocked, status: admin.status } },
     ipAddress: req.ip,
     userAgent: req.get("User-Agent"),
   });
 
   const { password: _, refreshToken: __, ...adminData } = admin.toObject();
-  successResponse(res, 200, "Admin status updated", adminData);
+  successResponse(res, 200, "Status updated successfully", adminData);
 });
 
 exports.resetAdminPassword = asyncHandler(async (req, res) => {
