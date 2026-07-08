@@ -65,6 +65,35 @@ exports.getUsers = asyncHandler(async (req, res) => {
     }
   }
 
+  let searchFilter = {};
+  if (search) {
+    searchFilter = {
+      $or: [
+        { name: new RegExp(search, "i") },
+        { email: new RegExp(search, "i") }
+      ]
+    };
+  }
+
+  const conditions = [];
+  if (Object.keys(locationFilter).length > 0) conditions.push(locationFilter);
+  if (Object.keys(searchFilter).length > 0) conditions.push(searchFilter);
+
+  if (conditions.length > 0) {
+    filter.$and = conditions;
+  }
+
+  if (filter.role === "customer" || req.query.role === "customer") {
+    if (!["vice_president", "executive_director"].includes(req.user.role)) {
+      filter.status = { $nin: ["pending_approval", "rejected"] };
+    }
+  } else if (!filter.role) {
+    filter.$or = [
+      { role: { $ne: "customer" } },
+      { status: { $nin: ["pending_approval", "rejected"] } }
+    ];
+  }
+
   if (exportFormat === "csv") {
     const users = await User.find(filter).select("-password -refreshToken").sort("-createdAt").lean();
     const populatedUsers = await populateUserOrganizationLocations(users);
