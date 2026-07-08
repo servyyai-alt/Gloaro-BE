@@ -53,7 +53,7 @@ exports.getDashboardSummary = asyncHandler(async (req, res) => {
 });
 
 exports.getAnalyticsSummary = asyncHandler(async (req, res) => {
-  const data = await reportService.getAnalyticsSummary(req.query);
+  const data = await reportService.getAnalyticsSummary(req.query, req.user);
   successResponse(res, 200, "Analytics summary", data);
 });
 

@@ -1,7 +1,9 @@
 const User = require("../models/User");
 const Vendor = require("../models/Vendor");
+const AuditLog = require("../models/AuditLog");
 const Payment = require("../models/Payment");
 const Lead = require("../models/Lead");
+const { getScopedUserFilter, getAllowedUserIds, getScopedVendorFilter } = require("../utils/scopingHelper");
 const Product = require("../models/Product");
 const Service = require("../models/Service");
 const Event = require("../models/Event");
@@ -147,9 +149,30 @@ class ReportService {
     return { total, byStatus, upcoming };
   }
 
-  async getAnalyticsSummary(query = {}) {
+  async getAnalyticsSummary(query = {}, caller) {
     const { from, to } = this._getDateRange(query);
     const dateFilter = { createdAt: { $gte: from, $lte: to } };
+
+    const scopedUserFilter = getScopedUserFilter(caller);
+    const scopedVendorFilter = getScopedVendorFilter(caller);
+    const allowedUserIds = await getAllowedUserIds(caller);
+
+    const userFilterWithDate = { ...dateFilter, ...scopedUserFilter };
+    const vendorFilterWithDate = { ...dateFilter, ...scopedVendorFilter };
+
+    const paymentFilter = { status: "completed", ...dateFilter };
+    if (allowedUserIds) paymentFilter.user = { $in: allowedUserIds };
+
+    const membershipFilter = { ...dateFilter };
+    if (allowedUserIds) membershipFilter.user = { $in: allowedUserIds };
+
+    let productFilter = { status: "approved", isActive: true };
+    let serviceFilter = { status: "approved", isActive: true };
+    if (caller && !["superadmin", "admin"].includes(caller.role)) {
+      const allowedVendorIds = (await Vendor.find(scopedVendorFilter).select("_id").lean()).map(v => v._id);
+      productFilter.vendor = { $in: allowedVendorIds };
+      serviceFilter.vendor = { $in: allowedVendorIds };
+    }
 
     const [
       monthlyRevenue,
@@ -162,7 +185,7 @@ class ReportService {
       popularServices,
     ] = await Promise.all([
       Payment.aggregate([
-        { $match: { status: "completed", ...dateFilter } },
+        { $match: paymentFilter },
         {
           $group: {
             _id: { year: { $year: "$createdAt" }, month: { $month: "$createdAt" } },
@@ -173,21 +196,21 @@ class ReportService {
         { $sort: { "_id.year": 1, "_id.month": 1 } },
       ]),
       User.aggregate([
-        { $match: dateFilter },
+        { $match: userFilterWithDate },
         { $group: { _id: { year: { $year: "$createdAt" }, month: { $month: "$createdAt" } }, users: { $sum: 1 } } },
         { $sort: { "_id.year": 1, "_id.month": 1 } },
       ]),
       Vendor.aggregate([
-        { $match: dateFilter },
+        { $match: vendorFilterWithDate },
         { $group: { _id: { year: { $year: "$createdAt" }, month: { $month: "$createdAt" } }, vendors: { $sum: 1 } } },
         { $sort: { "_id.year": 1, "_id.month": 1 } },
       ]),
       Membership.aggregate([
-        { $match: dateFilter },
+        { $match: membershipFilter },
         { $group: { _id: "$plan", sales: { $sum: 1 }, revenue: { $sum: "$price" } } },
         { $sort: { revenue: -1 } },
       ]),
-      Vendor.find({ status: "approved" })
+      Vendor.find({ status: "approved", ...scopedVendorFilter })
         .sort("-stats.totalLeads -stats.totalViews -stats.avgRating")
         .limit(10)
         .select("businessName slug logo stats membership.plan"),
@@ -196,8 +219,15 @@ class ReportService {
         {
           $lookup: {
             from: "vendors",
-            localField: "_id",
-            foreignField: "businessCategory",
+            let: { catId: "$_id" },
+            pipeline: [
+              {
+                $match: {
+                  $expr: { $eq: ["$businessCategory", "$$catId"] },
+                  ...scopedVendorFilter
+                }
+              }
+            ],
             as: "vendors",
           },
         },
@@ -211,11 +241,11 @@ class ReportService {
         { $sort: { vendorCount: -1 } },
         { $limit: 10 },
       ]),
-      Product.find({ status: "approved", isActive: true })
+      Product.find(productFilter)
         .sort("-stats.views -stats.orders -stats.avgRating")
         .limit(10)
         .select("title slug images pricing stats"),
-      Service.find({ status: "approved", isActive: true })
+      Service.find(serviceFilter)
         .sort("-stats.views -stats.inquiries -stats.avgRating")
         .limit(10)
         .select("title slug gallery pricing stats"),

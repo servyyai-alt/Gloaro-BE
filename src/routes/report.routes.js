@@ -3,7 +3,15 @@ const router = express.Router();
 const reportController = require("../controllers/report.controller");
 const { protect, authorize } = require("../middleware/auth");
 
-router.use(protect, authorize("admin", "superadmin"));
+const { ADMIN_ROLE_VALUES } = require("../constants/adminRoles");
+
+router.use(protect, (req, res, next) => {
+  const cleanPath = req.path.replace(/^\/+|\/+$/g, "");
+  if (cleanPath === "analytics") {
+    return authorize(...ADMIN_ROLE_VALUES)(req, res, next);
+  }
+  return authorize("admin", "superadmin")(req, res, next);
+});
 
 /**
  * @swagger
