@@ -12,8 +12,8 @@ class SecretaryService {
     const org = profile.organization || {};
     const chapterId = org.chapter;
 
-    const filter = { role: { $in: ["customer", "user"] } };
-    const activeFilter = { role: { $in: ["customer", "user"] }, isActive: true };
+    const filter = { role: { $in: ["customer", "user"] }, status: { $nin: ["pending_approval", "rejected"] } };
+    const activeFilter = { role: { $in: ["customer", "user"] }, isActive: true, status: { $nin: ["pending_approval", "rejected"] } };
 
     if (chapterId) {
       filter["meta.adminProfile.organization.chapter"] = chapterId.toString();

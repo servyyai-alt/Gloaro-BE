@@ -197,7 +197,7 @@ router.post(
 router.patch(
   "/admin-accounts/:id/status",
   authorize(...ADMIN_ROLE_VALUES),
-  [body("action").isIn(["suspend", "activate", "lock", "unlock"]).withMessage("Invalid status action")],
+  [body("action").isIn(["suspend", "activate", "lock", "unlock", "approve", "reject"]).withMessage("Invalid status action")],
   validate,
   adminController.updateAdminAccountStatus
 );
