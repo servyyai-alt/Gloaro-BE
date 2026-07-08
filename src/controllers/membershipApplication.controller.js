@@ -12,7 +12,9 @@ const idGenerator = require("../services/idGenerator.service");
 
 const getUserMeta = (user) => {
   if (!user?.meta) return {};
-  if (typeof user.meta.toObject === "function") return user.meta.toObject();
+  if (typeof user.toObject === "function") {
+    return user.toObject({ flattenMaps: true }).meta || {};
+  }
   if (user.meta instanceof Map) return Object.fromEntries(user.meta);
   return user.meta;
 };
@@ -191,7 +193,7 @@ exports.getApplications = asyncHandler(async (req, res) => {
   const isSuperOrAdmin = ["superadmin", "admin"].includes(role);
 
   if (!isSuperOrAdmin) {
-    const meta = req.user.meta ? (typeof req.user.meta.toObject === "function" ? req.user.meta.toObject() : (req.user.meta instanceof Map ? Object.fromEntries(req.user.meta) : req.user.meta)) : {};
+    const meta = getUserMeta(req.user);
     const profile = meta.adminProfile || {};
     const org = profile.organization || {};
 
@@ -339,7 +341,7 @@ exports.updateApplicationStatus = asyncHandler(async (req, res) => {
   }
 
   const isSuperAdmin = role === "superadmin";
-  const userOrg = req.user.meta ? (typeof req.user.meta.toObject === "function" ? req.user.meta.toObject() : (req.user.meta instanceof Map ? Object.fromEntries(req.user.meta) : req.user.meta))?.adminProfile?.organization || {} : {};
+  const userOrg = getUserMeta(req.user)?.adminProfile?.organization || {};
 
   const isDirectConsultant = role === "direct_consultant" && (
     application.directConsultantId?.toString() === req.user._id.toString() ||
@@ -355,7 +357,7 @@ exports.updateApplicationStatus = asyncHandler(async (req, res) => {
 
   // Check PBAC fallback but restrict it for non-admin/non-vp
   if (!isAuthorized) {
-    const meta = req.user.meta ? (typeof req.user.meta.toObject === "function" ? req.user.meta.toObject() : (req.user.meta instanceof Map ? Object.fromEntries(req.user.meta) : req.user.meta)) : {};
+    const meta = getUserMeta(req.user);
     const profile = meta.adminProfile || {};
     if (profile.permissions?.members?.canApprove === true) {
       const officials = [

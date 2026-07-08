@@ -53,6 +53,10 @@ const vendorSchema = new mongoose.Schema(
     approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     rejectedReason: String,
     suspendedReason: String,
+    regionId: { type: mongoose.Schema.Types.ObjectId, ref: "EnterpriseRecord", index: true },
+    stateId: { type: mongoose.Schema.Types.ObjectId, ref: "EnterpriseRecord", index: true },
+    districtId: { type: mongoose.Schema.Types.ObjectId, ref: "EnterpriseRecord", index: true },
+    chapterId: { type: mongoose.Schema.Types.ObjectId, ref: "EnterpriseRecord", index: true },
     // Membership
     membership: {
       plan: { type: String, enum: ["free", "silver", "gold", "platinum"], default: "free" },
