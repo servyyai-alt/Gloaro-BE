@@ -189,6 +189,37 @@ const emailTemplates = {
         </a>
       </div>`,
   }),
+
+  welcome: (name) => ({
+    subject: "Welcome to Gloaro Network!",
+    html: `
+      <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px">
+        <h2 style="color:#2563eb">Welcome, ${name}!</h2>
+        <p>Your account has been registered successfully. We are excited to have you join our network.</p>
+        <p>Explore the marketplace, connect with other members, and make the most of your journey.</p>
+        <a href="${process.env.CLIENT_URL}/login"
+           style="display:inline-block;background:#2563eb;color:white;padding:12px 24px;border-radius:6px;text-decoration:none;margin:16px 0">
+          Get Started
+        </a>
+      </div>`,
+  }),
+
+  meetingInvitation: (name, title, date, venue) => ({
+    subject: `Meeting Invitation: ${title}`,
+    html: `
+      <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px">
+        <h2 style="color:#2563eb">Meeting Invitation</h2>
+        <p>Hi ${name},</p>
+        <p>You are invited to the upcoming meeting: <strong>${title}</strong></p>
+        <p><strong>Date & Time:</strong> ${date}</p>
+        <p><strong>Venue:</strong> ${venue}</p>
+        <p>Please log in to your portal to RSVP or view details.</p>
+        <a href="${process.env.CLIENT_URL}"
+           style="display:inline-block;background:#2563eb;color:white;padding:12px 24px;border-radius:6px;text-decoration:none;margin:16px 0">
+          View Portal
+        </a>
+      </div>`,
+  }),
 };
 
 const sendTemplateEmail = async (to, template, ...args) => {

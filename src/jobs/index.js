@@ -30,25 +30,15 @@ const startJobs = () => {
         }).populate("user", "name email preferences").populate("vendor", "businessName");
 
         for (const membership of expiring) {
-          // Send email
-          if (membership.user.preferences?.emailNotifications) {
-            await sendTemplateEmail(
-              membership.user.email,
-              "membershipExpiry",
-              membership.user.name,
-              membership.plan,
-              days
-            ).catch((err) => logger.error("Membership expiry email failed:", err.message));
-          }
-
-          // In-app notification
-          await Notification.create({
-            recipient: membership.user._id,
+          const notificationService = require("../services/notification.service");
+          await notificationService.sendNotification({
+            recipientId: membership.user._id,
             type: "membership_expiry",
             title: "Membership Expiring Soon",
             message: `Your ${membership.plan} membership expires in ${days} day${days > 1 ? "s" : ""}. Renew now to avoid interruption.`,
             link: "/membership/renew",
-            priority: days === 1 ? "high" : "normal",
+            emailTemplate: membership.user.preferences?.emailNotifications ? "membershipExpiry" : null,
+            emailParams: [membership.user.name, membership.plan, days]
           });
 
           if (days === 1) {

@@ -161,6 +161,11 @@ Password: Admin@123
 | Admin      | admin@vendordirectory.com          | Admin@123      |
 | Vendor     | vendor@vendordirectory.com         | Vendor@123     |
 | Customer   | customer@vendordirectory.com       | Customer@123   |
+|South Region | Dharani@gmail.com                 | southregion1   |
+|Tamil Nadu  | dharani1@gmail.com                 | tamilnadu1     |
+|Vellore     | dharni2@gmail.com                  | vellore1       |
+|TollGate    | dharni3@gmail.com                  | tollgate1      |
+
 
 ---
 

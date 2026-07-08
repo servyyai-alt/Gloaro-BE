@@ -171,6 +171,10 @@ router.get("/services", reportController.getServiceReport);
  *       200:
  *         description: Events report data
  */
-router.get("/events", reportController.getEventReport);
+router.get("/officials", reportController.getOfficialReport);
+router.get("/attendance", reportController.getAttendanceReport);
+router.get("/meetings", reportController.getMeetingReport);
+router.get("/payments", reportController.getPaymentReport);
+router.get("/referrals", reportController.getReferralReport);
 
 module.exports = router;

@@ -13,6 +13,8 @@ const notificationSchema = new mongoose.Schema(
         "event_reminder", "event_registration", "referral_reward",
         "product_approved", "service_approved", "support_reply",
         "system", "announcement",
+        "user_created", "membership_registered", "membership_approved",
+        "membership_rejected", "meeting_created", "attendance_submitted",
       ],
       required: true,
     },
