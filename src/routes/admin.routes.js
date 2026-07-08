@@ -11,7 +11,9 @@ router.use(protect, authorize(...ADMIN_ROLE_VALUES));
 
 const getMeta = (user) => {
   if (!user?.meta) return {};
-  if (typeof user.meta.toObject === "function") return user.meta.toObject();
+  if (typeof user.toObject === "function") {
+    return user.toObject({ flattenMaps: true }).meta || {};
+  }
   if (user.meta instanceof Map) return Object.fromEntries(user.meta);
   return user.meta;
 };

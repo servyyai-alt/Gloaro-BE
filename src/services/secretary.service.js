@@ -1,13 +1,22 @@
 const User = require("../models/User");
 const Event = require("../models/Event");
 
+const getUserMeta = (user) => {
+  if (!user?.meta) return {};
+  if (typeof user.toObject === "function") {
+    return user.toObject({ flattenMaps: true }).meta || {};
+  }
+  if (user.meta instanceof Map) return Object.fromEntries(user.meta);
+  return user.meta;
+};
+
 class SecretaryService {
   // TODO:
   // When the Chapter Management module is implemented,
   // scope dashboard queries using req.user.chapterId so Secretaries
   // only access data belonging to their assigned chapter.
   async getDashboardData(user) {
-    const meta = user.meta ? (typeof user.meta.toObject === "function" ? user.meta.toObject() : (user.meta instanceof Map ? Object.fromEntries(user.meta) : user.meta)) : {};
+    const meta = getUserMeta(user);
     const profile = meta.adminProfile || {};
     const org = profile.organization || {};
     const chapterId = org.chapter;
@@ -66,7 +75,7 @@ class SecretaryService {
   // so each Secretary only accesses members, meetings, attendance, documents,
   // and reports belonging to their assigned chapter.
   async getMembersData(user, { page, limit, skip, search, status }) {
-    const meta = user.meta ? (typeof user.meta.toObject === "function" ? user.meta.toObject() : (user.meta instanceof Map ? Object.fromEntries(user.meta) : user.meta)) : {};
+    const meta = getUserMeta(user);
     const profile = meta.adminProfile || {};
     const org = profile.organization || {};
     const chapterId = org.chapter;

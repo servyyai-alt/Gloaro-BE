@@ -15,6 +15,15 @@ const { sendTemplateEmail } = require("../utils/email");
 const { setCache, getCache, deleteCache } = require("../config/redis");
 const idGenerator = require("./idGenerator.service");
 
+const getUserMeta = (user) => {
+  if (!user?.meta) return {};
+  if (typeof user.toObject === "function") {
+    return user.toObject({ flattenMaps: true }).meta || {};
+  }
+  if (user.meta instanceof Map) return Object.fromEntries(user.meta);
+  return user.meta;
+};
+
 class VendorService {
   async createVendor(userId, data, files) {
     const existing = await Vendor.findOne({ user: userId });
@@ -65,7 +74,7 @@ class VendorService {
     return vendor;
   }
 
-  async getVendors(query) {
+  async getVendors(query, caller) {
     const { page, limit, skip } = getPagination(query);
     const {
       status, category, city, state, featured, verified,
@@ -82,10 +91,42 @@ class VendorService {
     if (plan) filter["membership.plan"] = plan;
     if (search) filter.$text = { $search: search };
 
+    if (caller && !["superadmin", "admin"].includes(caller.role)) {
+      const meta = getUserMeta(caller);
+      const org = meta.adminProfile?.organization || {};
+      const userFilter = {};
+      let hasOrg = false;
+
+      if (org.chapter) {
+        userFilter["meta.adminProfile.organization.chapter"] = org.chapter.toString();
+        hasOrg = true;
+      } else if (org.district) {
+        userFilter["meta.adminProfile.organization.district"] = org.district.toString();
+        hasOrg = true;
+      } else if (org.state) {
+        userFilter["meta.adminProfile.organization.state"] = org.state.toString();
+        hasOrg = true;
+      } else if (org.region) {
+        userFilter["meta.adminProfile.organization.region"] = org.region.toString();
+        hasOrg = true;
+      }
+
+      if (hasOrg) {
+        const scopedUsers = await User.find(userFilter).select("_id");
+        const userIds = scopedUsers.map((u) => u._id);
+        filter.user = { $in: userIds };
+      }
+    }
+
     const [vendors, total] = await Promise.all([
       Vendor.find(filter)
         .populate("businessCategory", "name slug")
         .populate("user", "name email")
+        .populate("regionId", "name code")
+        .populate("stateId", "name code")
+        .populate("districtId", "name code")
+        .populate("chapterId", "name code")
+        .populate("approvedBy", "name email")
         .sort(sortBy)
         .skip(skip)
         .limit(limit)

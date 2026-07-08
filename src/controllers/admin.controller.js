@@ -200,7 +200,7 @@ exports.getDashboard = asyncHandler(async (req, res) => {
   const appFilter = {};
 
   if (!isSuperOrAdmin) {
-    const meta = req.user.meta ? (typeof req.user.meta.toObject === "function" ? req.user.meta.toObject() : (req.user.meta instanceof Map ? Object.fromEntries(req.user.meta) : req.user.meta)) : {};
+    const meta = getUserMeta(req.user);
     const profile = meta.adminProfile || {};
     const org = profile.organization || {};
 
@@ -1337,7 +1337,25 @@ exports.updateAdminAccountStatus = asyncHandler(async (req, res) => {
   if (action === "activate") Object.assign(admin, { isActive: true, isSuspended: false, isBlocked: false, suspendedReason: undefined, blockedReason: undefined });
   if (action === "lock") Object.assign(admin, { isBlocked: true, blockedAt: new Date(), blockedReason: req.body.reason });
   if (action === "unlock") Object.assign(admin, { isBlocked: false, blockedReason: undefined, loginAttempts: 0, lockUntil: undefined });
-  if (action === "approve") Object.assign(admin, { status: "approved" });
+  if (action === "approve") {
+    admin.status = "approved";
+    if (admin.role === "customer" && !admin.memberId) {
+      const meta = getUserMeta(admin);
+      const org = meta.adminProfile?.organization || {};
+      const stateRecord = org.state ? await EnterpriseRecord.findById(org.state) : null;
+      const districtRecord = org.district ? await EnterpriseRecord.findById(org.district) : null;
+      const stateCode = stateRecord?.code || "GL";
+      const districtCode = districtRecord?.code || "GLO";
+      const generatedMemberId = await idGenerator.generateMemberId({ stateCode, districtCode });
+      
+      // Perform direct database update to bypass Mongoose's immutable: true check for this one-time assignment
+      await User.collection.updateOne(
+        { _id: admin._id, memberId: { $exists: false } },
+        { $set: { memberId: generatedMemberId } }
+      );
+      admin.memberId = generatedMemberId;
+    }
+  }
   if (action === "reject") Object.assign(admin, { status: "rejected" });
   await admin.save();
 

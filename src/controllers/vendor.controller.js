@@ -10,7 +10,7 @@ exports.createVendor = asyncHandler(async (req, res) => {
 
 exports.getVendors = asyncHandler(async (req, res) => {
   if (req.query.export === "csv") {
-    const { vendors } = await vendorService.getVendors({ ...req.query, limit: 100000, page: 1 });
+    const { vendors } = await vendorService.getVendors({ ...req.query, limit: 100000, page: 1 }, req.user);
     const { exportToCSV } = require("../utils/csv");
     return exportToCSV(res, vendors, [
       { label: "Business Name", key: "businessName" },
@@ -25,7 +25,7 @@ exports.getVendors = asyncHandler(async (req, res) => {
     ], "vendors.csv");
   }
 
-  const { vendors, total, page, limit } = await vendorService.getVendors(req.query);
+  const { vendors, total, page, limit } = await vendorService.getVendors(req.query, req.user);
   paginatedResponse(res, vendors, page, limit, total, "Vendors retrieved");
 });
 
