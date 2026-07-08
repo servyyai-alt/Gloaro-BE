@@ -20,7 +20,7 @@ const getMeta = (user) => {
 
 const inferAdminModule = (path) => {
   if (path === "/dashboard") return "dashboard";
-  if (path.startsWith("/admin-accounts")) return "settings";
+  if (path.startsWith("/admin-accounts")) return "members";
   if (path.startsWith("/super-config") || path.startsWith("/settings") || path.startsWith("/system")) return "settings";
   if (path.startsWith("/audit-logs")) return "reports";
   if (path.startsWith("/enterprise/search")) return "settings";

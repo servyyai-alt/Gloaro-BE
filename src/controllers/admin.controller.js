@@ -18,6 +18,7 @@ const { generateAccessToken, generateRefreshToken } = require("../utils/jwt");
 const { asyncHandler, AppError } = require("../middleware/errorHandler");
 const { sendTemplateEmail } = require("../utils/email");
 const { successResponse, paginatedResponse, getPagination } = require("../utils/response");
+const mongoose = require("mongoose");
 
 const SUPER_CONFIG_KEYS = {
   roles: "superadmin.roles",
@@ -235,26 +236,54 @@ exports.getDashboard = asyncHandler(async (req, res) => {
       filter.stateId = locationIds.stateId;
     } else if (["executive_director", "district_director"].includes(role)) {
       filter.districtId = locationIds.districtId;
-    } else if (["launch_director", "direct_consultant", "chapter_president", "vice_president"].includes(role)) {
+    } else if (["launch_director", "direct_consultant", "chapter_president", "vice_president", "secretary"].includes(role)) {
       filter.chapterId = locationIds.chapterId;
     }
 
     if (filter.regionId) {
       userFilter["meta.adminProfile.organization.region"] = filter.regionId.toString();
       appFilter.regionId = filter.regionId;
+      vendorFilter.regionId = filter.regionId;
     }
     if (filter.stateId) {
       userFilter["meta.adminProfile.organization.state"] = filter.stateId.toString();
       appFilter.stateId = filter.stateId;
+      vendorFilter.stateId = filter.stateId;
     }
     if (filter.districtId) {
       userFilter["meta.adminProfile.organization.district"] = filter.districtId.toString();
       appFilter.districtId = filter.districtId;
+      vendorFilter.districtId = filter.districtId;
     }
     if (filter.chapterId) {
       userFilter["meta.adminProfile.organization.chapter"] = filter.chapterId.toString();
       appFilter.chapterId = filter.chapterId;
+      vendorFilter.chapterId = filter.chapterId;
     }
+  }
+
+  // Get allowed IDs for scoping subdocuments (Services, Products, Events, Payments)
+  let serviceFilter = { isActive: true };
+  let productFilter = { isActive: true };
+  let eventFilter = { isActive: true };
+  const paymentFilter = { status: "completed" };
+  const mPaymentFilter = { status: "completed", type: "membership" };
+  const rPaymentFilter = {};
+
+  if (!isSuperOrAdmin) {
+    const [scopedUserIds, scopedVendorIds] = await Promise.all([
+      User.find(userFilter).select("_id").lean(),
+      Vendor.find(vendorFilter).select("_id").lean()
+    ]);
+    const userIds = scopedUserIds.map(u => u._id);
+    const vendorIds = scopedVendorIds.map(v => v._id);
+
+    serviceFilter.vendor = { $in: vendorIds };
+    productFilter.vendor = { $in: vendorIds };
+    eventFilter.organizer = { $in: userIds };
+    paymentFilter.user = { $in: userIds };
+    mPaymentFilter.user = { $in: userIds };
+    rPaymentFilter.user = { $in: userIds };
   }
 
   const [
@@ -269,21 +298,21 @@ exports.getDashboard = asyncHandler(async (req, res) => {
     Vendor.countDocuments({ ...vendorFilter, status: "pending" }),
     Vendor.countDocuments({ ...vendorFilter, status: "approved", isActive: true }),
     Vendor.countDocuments({ ...vendorFilter, isVerified: true }),
-    Service.countDocuments({ isActive: true }),
-    Product.countDocuments({ isActive: true }),
-    Event.countDocuments({ isActive: true }),
+    Service.countDocuments(serviceFilter),
+    Product.countDocuments(productFilter),
+    Event.countDocuments(eventFilter),
     User.countDocuments({ ...userFilter, createdAt: { $gte: new Date(new Date().setHours(0, 0, 0, 0)) } }),
     Vendor.countDocuments({ ...vendorFilter, createdAt: { $gte: new Date(new Date().setHours(0, 0, 0, 0)) } }),
     Payment.aggregate([
-      { $match: { status: "completed" } },
+      { $match: paymentFilter },
       { $group: { _id: null, total: { $sum: "$amount" } } },
     ]),
     Payment.aggregate([
-      { $match: { status: "completed", type: "membership" } },
+      { $match: mPaymentFilter },
       { $group: { _id: null, total: { $sum: "$amount" } } },
     ]),
     Payment.aggregate([
-      { $match: { status: "completed" } },
+      { $match: paymentFilter },
       {
         $group: {
           _id: { year: { $year: "$createdAt" }, month: { $month: "$createdAt" } },
@@ -294,7 +323,7 @@ exports.getDashboard = asyncHandler(async (req, res) => {
       { $sort: { "_id.year": -1, "_id.month": -1 } },
       { $limit: 12 },
     ]),
-    Payment.find().populate("user", "name email").populate("vendor", "businessName").sort("-createdAt").limit(10),
+    Payment.find(rPaymentFilter).populate("user", "name email").populate("vendor", "businessName").sort("-createdAt").limit(10),
     MembershipApplication.countDocuments(appFilter),
     MembershipApplication.countDocuments({ ...appFilter, status: "submitted" }),
     MembershipApplication.countDocuments({ ...appFilter, status: "documents_verified" }),
@@ -1006,33 +1035,13 @@ exports.getAdminAccounts = asyncHandler(async (req, res) => {
     }
 
     if (org.chapter) {
-      locationFilter = {
-        $or: [
-          { "meta.adminProfile.organization.chapter": org.chapter.toString() },
-          { "meta": { $exists: false } }
-        ]
-      };
+      locationFilter = { "meta.adminProfile.organization.chapter": org.chapter.toString() };
     } else if (org.district) {
-      locationFilter = {
-        $or: [
-          { "meta.adminProfile.organization.district": org.district.toString() },
-          { "meta": { $exists: false } }
-        ]
-      };
+      locationFilter = { "meta.adminProfile.organization.district": org.district.toString() };
     } else if (org.state) {
-      locationFilter = {
-        $or: [
-          { "meta.adminProfile.organization.state": org.state.toString() },
-          { "meta": { $exists: false } }
-        ]
-      };
+      locationFilter = { "meta.adminProfile.organization.state": org.state.toString() };
     } else if (org.region) {
-      locationFilter = {
-        $or: [
-          { "meta.adminProfile.organization.region": org.region.toString() },
-          { "meta": { $exists: false } }
-        ]
-      };
+      locationFilter = { "meta.adminProfile.organization.region": org.region.toString() };
     } else {
       return paginatedResponse(res, [], page, limit, 0, "No organization assigned");
     }

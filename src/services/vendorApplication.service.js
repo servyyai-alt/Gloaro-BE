@@ -348,8 +348,16 @@ class VendorApplicationService {
       });
 
       // 2. Create/Update the active Vendor document
+      const slugify = require("slugify");
+      let slug = slugify(app.step2.details.businessName, { lower: true, strict: true });
+      const existingVendor = await Vendor.findOne({ slug });
+      if (existingVendor && existingVendor.user.toString() !== app.user.toString()) {
+        slug = `${slug}-${Date.now()}`;
+      }
+
       const vendorData = {
         user: app.user,
+        slug,
         vendorId: generatedVendorId,
         businessName: app.step2.details.businessName,
         ownerName: app.step2.personal.fullName,
