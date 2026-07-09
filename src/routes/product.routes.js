@@ -116,7 +116,7 @@ router.use(protect);
  *       403:
  *         description: Not authorized (vendor only)
  */
-router.post("/", authorize("vendor"), uploadMultiple("images", "products"), productController.createProduct);
+router.post("/", authorize("vendor", "customer", "user"), uploadMultiple("images", "products"), productController.createProduct);
 
 /**
  * @swagger
