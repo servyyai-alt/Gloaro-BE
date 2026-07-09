@@ -52,7 +52,7 @@ exports.getProducts = asyncHandler(async (req, res) => {
 
   const [products, total] = await Promise.all([
     Product.find(filter)
-      .populate("vendor", "businessName slug logo")
+      .populate({ path: "vendor", select: "businessName ownerName slug logo", populate: { path: "user", select: "name" } })
       .populate("category", "name slug")
       .sort(sort).skip(skip).limit(limit),
     Product.countDocuments(filter),
@@ -62,7 +62,7 @@ exports.getProducts = asyncHandler(async (req, res) => {
 
 exports.getProductById = asyncHandler(async (req, res) => {
   const product = await Product.findById(req.params.id)
-    .populate("vendor", "businessName slug logo address stats")
+    .populate({ path: "vendor", select: "businessName ownerName slug logo address stats", populate: { path: "user", select: "name" } })
     .populate("category", "name");
   if (!product) throw new AppError("Product not found", 404);
   await Product.findByIdAndUpdate(req.params.id, { $inc: { "stats.views": 1 } });
