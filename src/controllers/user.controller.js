@@ -128,7 +128,7 @@ exports.getUserById = asyncHandler(async (req, res) => {
 });
 
 exports.getProfile = asyncHandler(async (req, res) => {
-  const user = await User.findById(req.user._id).select("-password -refreshToken").populate("createdBy", "name email role");
+  const user = await User.findById(req.user._id).select("-password -refreshToken");
   if (!user) throw new AppError("User not found", 404);
   const populated = await populateUserOrganizationLocations([user]);
   successResponse(res, 200, "Profile retrieved", populated[0]);
