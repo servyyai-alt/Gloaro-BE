@@ -29,9 +29,10 @@ exports.createService = asyncHandler(async (req, res) => {
     serviceId: await idGenerator.generateServiceId({ vendorId: vendor.vendorId }),
     vendor: vendor._id,
     gallery: images,
+    status: "approved",
   });
   await Vendor.findByIdAndUpdate(vendor._id, { $inc: { "stats.totalServices": 1 } });
-  successResponse(res, 201, "Service created and pending approval", service);
+  successResponse(res, 201, "Service created successfully", service);
 });
 
 exports.getServices = asyncHandler(async (req, res) => {

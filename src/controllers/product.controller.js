@@ -29,9 +29,10 @@ exports.createProduct = asyncHandler(async (req, res) => {
     productId: await idGenerator.generateProductId({ vendorId: vendor.vendorId }),
     vendor: vendor._id,
     images,
+    status: "approved",
   });
   await Vendor.findByIdAndUpdate(vendor._id, { $inc: { "stats.totalProducts": 1 } });
-  successResponse(res, 201, "Product created and pending approval", product);
+  successResponse(res, 201, "Product created successfully", product);
 });
 
 exports.getProducts = asyncHandler(async (req, res) => {
