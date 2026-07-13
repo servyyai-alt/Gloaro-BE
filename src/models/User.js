@@ -57,6 +57,12 @@ const userSchema = new mongoose.Schema(
       country: { type: String, default: "India" },
       pincode: String,
     },
+    vendorProfile: {
+      status: { type: String, enum: ["none", "pending", "approved", "rejected"], default: "none" },
+      vendorId: { type: mongoose.Schema.Types.ObjectId, ref: "Vendor" },
+      approvedAt: Date,
+      approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" }
+    },
     meta: { type: Map, of: mongoose.Schema.Types.Mixed },
   },
   {

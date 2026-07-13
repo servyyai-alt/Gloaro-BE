@@ -36,6 +36,8 @@ const customerRoutes = require("./routes/customer.routes");
 const adminRoutes = require("./routes/admin.routes");
 const secretaryRoutes = require("./routes/secretary.routes");
 const locationRoutes = require("./routes/location.routes");
+const communityRoutes = require("./routes/community.routes");
+const permissionRoutes = require("./routes/permission.routes");
 
 const app = express();
 const allowedOrigins = [
@@ -141,6 +143,8 @@ app.use("/api/v1/customers", customerRoutes);
 app.use("/api/v1/admin", adminRoutes);
 app.use("/api/v1/secretary", secretaryRoutes);
 app.use("/api/v1/organization", locationRoutes);
+app.use("/api/v1/community", communityRoutes);
+app.use("/api/v1/permissions", permissionRoutes);
 
 // Error handlers
 app.use(notFound);

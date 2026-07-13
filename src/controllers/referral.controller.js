@@ -5,19 +5,30 @@ const { successResponse, paginatedResponse, getPagination } = require("../utils/
 
 exports.getMyReferrals = asyncHandler(async (req, res) => {
   const { page, limit, skip } = getPagination(req.query);
+  
   const [referrals, total] = await Promise.all([
-    Referral.find({ referrer: req.user._id })
-      .populate("referred", "name email createdAt")
+    Referral.find({ referrer: req.user._id, type: "signup" })
+      .populate("referred", "name email phone meta createdAt isActive")
       .sort("-createdAt").skip(skip).limit(limit),
-    Referral.countDocuments({ referrer: req.user._id }),
+    Referral.countDocuments({ referrer: req.user._id, type: "signup" }),
   ]);
 
-  const stats = await Referral.aggregate([
-    { $match: { referrer: req.user._id } },
-    { $group: { _id: "$status", count: { $sum: 1 }, totalCommission: { $sum: "$commission.amount" } } },
-  ]);
+  const approvedCount = await User.countDocuments({ referredBy: req.user._id, isActive: true });
+  const pendingCount = await User.countDocuments({ referredBy: req.user._id, isActive: false });
+  const wonBusinessRefs = await Referral.find({ referrer: req.user._id, type: "business", status: "won" });
+  const businessGenerated = wonBusinessRefs.reduce((sum, r) => sum + (r.businessValue || r.actualValue || 0), 0);
 
-  paginatedResponse(res, referrals, page, limit, total, "Referrals retrieved");
+  res.status(200).json({
+    success: true,
+    data: referrals,
+    pagination: { page, limit, total },
+    stats: {
+      totalUsed: total,
+      pendingApproval: pendingCount,
+      approvedMembers: approvedCount,
+      businessGenerated
+    }
+  });
 });
 
 exports.getMyReferralCode = asyncHandler(async (req, res) => {

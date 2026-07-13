@@ -24,8 +24,18 @@ class AuthService {
     if (existingUser) throw new AppError("Email already registered", 409);
 
     let referrer = null;
+    let bniReferral = null;
     if (referralCode) {
-      referrer = await User.findOne({ referralCode });
+      const codeUpper = String(referralCode).trim().toUpperCase();
+      if (codeUpper.startsWith("GLR-REF-")) {
+        const Referral = require("../models/Referral");
+        bniReferral = await Referral.findOne({ code: codeUpper });
+        if (bniReferral) {
+          referrer = await User.findById(bniReferral.referrer);
+        }
+      } else {
+        referrer = await User.findOne({ referralCode: codeUpper });
+      }
     }
 
     const user = await User.create({
@@ -35,10 +45,17 @@ class AuthService {
       password,
       role: ["vendor", "customer", "user"].includes(role) ? (role === "user" ? "customer" : role) : "customer",
       referredBy: referrer?._id,
-      referralCode: await idGenerator.generateReferralId(),
+      referralCode: await idGenerator.generateMemberReferralCode(),
     });
 
-    if (referrer) {
+    if (bniReferral) {
+      bniReferral.referred = user._id;
+      bniReferral.isLinkedMember = true;
+      bniReferral.linkedMemberId = user._id;
+      bniReferral.status = "won";
+      await bniReferral.save();
+    } else if (referrer) {
+      const Referral = require("../models/Referral");
       await Referral.create({
         referrer: referrer._id,
         referred: user._id,

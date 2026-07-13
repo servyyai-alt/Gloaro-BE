@@ -174,9 +174,13 @@ class IdGeneratorService {
   }
 
   async generateReferralId(metadata = {}) {
-    const year = this.year(metadata.date);
-    const sequence = await this.getNextSequence(`referral:${year}`);
-    return `REF-${year}-${this.pad(sequence, 6)}`;
+    const sequence = await this.getNextSequence(`referral:global`);
+    return `GLR-REF-${this.pad(sequence, 6)}`;
+  }
+
+  async generateMemberReferralCode(metadata = {}) {
+    const sequence = await this.getNextSequence(`memberReferralCode:global`);
+    return `GLR-${this.pad(sequence, 6)}`;
   }
 
   async generateMeetingId(metadata = {}) {

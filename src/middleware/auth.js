@@ -24,6 +24,12 @@ const protect = asyncHandler(async (req, res, next) => {
   if (user.isLocked) throw new AppError("Account temporarily locked due to multiple failed logins", 423);
 
   req.user = user;
+
+  // Dynamically set effective role to "vendor" in memory if approved
+  if (user.role === "customer" && user.vendorProfile?.status === "approved") {
+    user.role = "vendor";
+  }
+
   next();
 });
 
@@ -74,22 +80,35 @@ const getMeta = (user) => {
   return user.meta;
 };
 
-const authorize = (...roles) => (req, res, next) => {
-  if (roles.some((role) => roleMatches(role, req.user.role))) return next();
+const authorize = (...roles) => async (req, res, next) => {
+  try {
+    if (req.user.role === "superadmin") return next();
 
-  const profile = getMeta(req.user).adminProfile;
-  if (profile?.modules?.length) {
+    // Infer permission code
     const moduleName = inferModuleFromPath(req.originalUrl || req.baseUrl + req.path);
-    if (moduleName && profile.modules.includes(moduleName)) {
-      const perm = profile.permissions?.[moduleName] || {};
-      const permName = requiredPermission(req.method);
-      if (perm.apiAccess === true && perm[permName] === true) {
-        return next();
-      }
-    }
-  }
+    if (moduleName) {
+      let action = "view";
+      if (req.method === "POST") action = "create";
+      else if (["PUT", "PATCH"].includes(req.method)) action = "edit";
+      else if (req.method === "DELETE") action = "delete";
 
-  throw new AppError(`Role '${req.user.role}' is not authorized to access this resource`, 403);
+      const pathStr = String(req.originalUrl || req.baseUrl + req.path).toLowerCase();
+      if (pathStr.includes("/approve")) action = "approve";
+      else if (pathStr.includes("/reject")) action = "reject";
+      else if (pathStr.includes("/export") || req.query.export) action = "export";
+
+      const permissionCode = `${moduleName}.${action}`;
+      const permissionService = require("../services/permission.service");
+      const hasPerm = await permissionService.hasPermission(req.user._id, req.user.role, permissionCode);
+      if (hasPerm) return next();
+    }
+
+    if (roles.some((role) => roleMatches(role, req.user.role))) return next();
+
+    throw new AppError(`Role '${req.user.role}' is not authorized to access this resource`, 403);
+  } catch (err) {
+    next(err);
+  }
 };
 
 const optionalAuth = asyncHandler(async (req, res, next) => {
