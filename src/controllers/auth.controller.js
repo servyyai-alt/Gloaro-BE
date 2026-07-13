@@ -177,6 +177,48 @@ exports.getMe = asyncHandler(async (req, res) => {
   successResponse(res, 200, "Profile retrieved", { user: sanitizeUser(populated[0]) });
 });
 
+// @GET /api/v1/auth/validate-referral/:code
+exports.validateReferral = asyncHandler(async (req, res) => {
+  const code = String(req.params.code).trim().toUpperCase();
+  
+  // 1. Check if it matches a member's permanent invite code (e.g. GLR-000245)
+  const User = require("../models/User");
+  const referrer = await User.findOne({ referralCode: code });
+  if (referrer) {
+    const chapterName = referrer.meta?.adminProfile?.organization?.chapterName || "Sultanpur";
+    return res.status(200).json({
+      success: true,
+      data: {
+        referredBy: referrer.name,
+        chapter: chapterName,
+        status: "Valid Referral Code"
+      }
+    });
+  }
+
+  // 2. Check if it matches a BNI business referral trace code (e.g. GLR-REF-000245)
+  if (code.startsWith("GLR-REF-")) {
+    const Referral = require("../models/Referral");
+    const referral = await Referral.findOne({ code }).populate("referrer").populate("referredVendor");
+    if (referral) {
+      const refUser = referral.referrer;
+      const vendor = referral.referredVendor;
+      const chapterName = refUser?.meta?.adminProfile?.organization?.chapterName || "Sultanpur";
+      return res.status(200).json({
+        success: true,
+        data: {
+          referredBy: refUser?.name || "Member1",
+          assignedVendor: vendor?.businessName || "ABC Technologies",
+          chapter: chapterName,
+          status: "Valid Referral Code"
+        }
+      });
+    }
+  }
+
+  return res.status(404).json({ success: false, message: "Invalid Referral Code" });
+});
+
 const sanitizeUser = (user) => {
   const u = user.toObject ? user.toObject({ flattenMaps: true }) : user;
   delete u.password;

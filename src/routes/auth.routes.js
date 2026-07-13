@@ -64,6 +64,8 @@ router.post(
   authController.register
 );
 
+router.get("/validate-referral/:code", authController.validateReferral);
+
 /**
  * @swagger
  * /auth/login:

@@ -58,7 +58,11 @@ router.use((req, res, next) => {
   const permissions = profile.permissions?.[moduleName] || {};
   const hasModule = profile.modules.includes(moduleName);
   const canUseApi = permissions.apiAccess === true;
-  const canPerform = permissions[requiredPermission(req.method)] === true;
+  let canPerform = permissions[requiredPermission(req.method)] === true;
+  
+  if (req.path.startsWith("/admin-accounts")) {
+    canPerform = permissions.canView === true;
+  }
 
   if (!hasModule || !canUseApi || !canPerform) {
     return res.status(403).json({ success: false, message: "You do not have permission to access this admin module" });

@@ -167,6 +167,10 @@ class VendorApplicationService {
 
     await app.save();
 
+    await User.findByIdAndUpdate(userId, {
+      "vendorProfile.status": "pending"
+    });
+
     // Notify officials & admins
     const admins = await User.find({ role: { $in: ["admin", "superadmin"] } }).select("_id");
     const adminIds = admins.map((a) => a._id.toString());
@@ -400,11 +404,23 @@ class VendorApplicationService {
         ].filter(Boolean),
       };
 
-      await Vendor.findOneAndUpdate(
+      const createdVendor = await Vendor.findOneAndUpdate(
         { user: app.user },
         vendorData,
         { upsert: true, new: true, setDefaultsOnInsert: true }
       );
+
+      await User.findByIdAndUpdate(app.user, {
+        role: "vendor",
+        "vendorProfile.status": "approved",
+        "vendorProfile.vendorId": createdVendor._id,
+        "vendorProfile.approvedAt": new Date(),
+        "vendorProfile.approvedBy": reviewerUser._id,
+      });
+    } else if (status === "rejected") {
+      await User.findByIdAndUpdate(app.user, {
+        "vendorProfile.status": "rejected"
+      });
     }
 
     // Notify member (applicant)

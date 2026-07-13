@@ -54,8 +54,11 @@ class VendorService {
 
     const vendor = await Vendor.create(vendorData);
 
-    // Update user role to vendor
-    await User.findByIdAndUpdate(userId, { role: "vendor" });
+    // Update user vendorProfile status to pending
+    await User.findByIdAndUpdate(userId, {
+      "vendorProfile.status": "pending",
+      "vendorProfile.vendorId": vendor._id
+    });
 
     // Notify admins
     const admins = await User.find({ role: { $in: ADMIN_ROLE_VALUES } }).select("_id");
@@ -208,7 +211,17 @@ class VendorService {
     await vendor.save();
 
     if (action === "approve" && vendor.user) {
-      vendor.user.role = "vendor";
+      vendor.user.vendorProfile = {
+        status: "approved",
+        vendorId: vendor._id,
+        approvedAt: new Date(),
+        approvedBy: adminId
+      };
+      await vendor.user.save({ validateBeforeSave: false });
+    } else if (action === "reject" && vendor.user) {
+      vendor.user.vendorProfile = {
+        status: "rejected"
+      };
       await vendor.user.save({ validateBeforeSave: false });
     }
 

@@ -10,6 +10,10 @@ const connectDB = async () => {
     });
 
     logger.info(`✅ MongoDB Connected: ${conn.connection.host}`);
+    
+    // Seed default permissions
+    const permissionService = require("../services/permission.service");
+    permissionService.seedPermissions();
 
     mongoose.connection.on("disconnected", () => {
       logger.warn("MongoDB disconnected. Attempting reconnect...");
