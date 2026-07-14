@@ -80,6 +80,13 @@ userSchema.index({ memberId: 1 }, { unique: true, sparse: true });
 userSchema.index({ officialId: 1 }, { unique: true, sparse: true });
 userSchema.index({ referralCode: 1 });
 userSchema.index({ createdAt: -1 });
+userSchema.index({
+  "meta.adminProfile.organization.chapter": 1,
+  role: 1,
+  isActive: 1,
+  isBlocked: 1,
+  isSuspended: 1
+});
 
 // Virtual: isLocked
 userSchema.virtual("isLocked").get(function () {
