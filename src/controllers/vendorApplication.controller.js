@@ -17,7 +17,7 @@ const parseData = (body) => {
 exports.getMyApplication = asyncHandler(async (req, res) => {
   const application = await vendorApplicationService.getMyApplication(req.user._id);
   if (!application) {
-    return res.status(404).json({ success: false, message: "No application found" });
+    return res.status(200).json({ success: true, data: null, message: "No application found" });
   }
   successResponse(res, 200, "Your vendor application retrieved", application);
 });
