@@ -37,11 +37,34 @@ exports.createService = asyncHandler(async (req, res) => {
 
 exports.getServices = asyncHandler(async (req, res) => {
   const { page, limit, skip } = getPagination(req.query);
+  const { getScopedVendorFilter } = require("../utils/scopingHelper");
+  const mongoose = require("mongoose");
+
+  // Get approved and active vendors in scope
+  const vendorQuery = {
+    ...getScopedVendorFilter(req.user),
+    status: "approved",
+    isActive: true
+  };
+  const vendors = await Vendor.find(vendorQuery).select("_id").lean();
+  const vendorIds = vendors.map(v => v._id);
+
   const filter = {};
   if (req.query.status) filter.status = req.query.status;
   else filter.status = "approved";
+
+  if (req.query.vendor) {
+    const targetVendorId = req.query.vendor;
+    if (vendorIds.some(id => id.toString() === targetVendorId.toString())) {
+      filter.vendor = targetVendorId;
+    } else {
+      filter.vendor = new mongoose.Types.ObjectId();
+    }
+  } else {
+    filter.vendor = { $in: vendorIds };
+  }
+
   if (req.query.category) filter.category = req.query.category;
-  if (req.query.vendor) filter.vendor = req.query.vendor;
   if (req.query.featured === "true") filter.isFeatured = true;
   if (req.query.search) filter.$text = { $search: req.query.search };
 

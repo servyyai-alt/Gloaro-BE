@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const serviceController = require("../controllers/service.controller");
-const { protect, authorize } = require("../middleware/auth");
+const { protect, authorize, optionalAuth } = require("../middleware/auth");
 const { uploadMultiple } = require("../config/cloudinary");
 
 /**
@@ -37,7 +37,7 @@ const { uploadMultiple } = require("../config/cloudinary");
  *       200:
  *         description: Services fetched successfully
  */
-router.get("/", serviceController.getServices);
+router.get("/", optionalAuth, serviceController.getServices);
 
 /**
  * @swagger

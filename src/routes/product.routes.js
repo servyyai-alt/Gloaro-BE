@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const productController = require("../controllers/product.controller");
-const { protect, authorize } = require("../middleware/auth");
+const { protect, authorize, optionalAuth } = require("../middleware/auth");
 const { uploadMultiple } = require("../config/cloudinary");
 
 /**
@@ -47,7 +47,7 @@ const { uploadMultiple } = require("../config/cloudinary");
  *       200:
  *         description: Products fetched successfully
  */
-router.get("/", productController.getProducts);
+router.get("/", optionalAuth, productController.getProducts);
 
 /**
  * @swagger

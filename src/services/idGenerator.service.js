@@ -27,7 +27,7 @@ const GENERIC_MODULE_PREFIXES = {
 };
 
 class IdGeneratorService {
-  async getNextSequence(module) {
+  async getNextSequence(module, session) {
     const counter = await Counter.findOneAndUpdate(
       { module: String(module).trim().toUpperCase() },
       { $inc: { sequence: 1 } },
@@ -35,6 +35,7 @@ class IdGeneratorService {
         new: true,
         upsert: true,
         setDefaultsOnInsert: true,
+        session
       }
     );
 
@@ -153,10 +154,10 @@ class IdGeneratorService {
     return `CH-${stateCode}-${areaCode}-${executiveDirectorCode}-${this.pad(sequence, 3)}`;
   }
 
-  async generateMemberId(metadata = {}) {
+  async generateMemberId(metadata = {}, session) {
     const stateCode = this.normalize(metadata.stateCode || metadata.state, "State code", { length: 2 });
     const districtCode = this.normalize(metadata.districtCode || metadata.district || metadata.areaCode || metadata.area || metadata.cityCode || metadata.city, "District code", { length: 3 });
-    const sequence = await this.getNextSequence(`member:${stateCode}:${districtCode}`);
+    const sequence = await this.getNextSequence(`member:${stateCode}:${districtCode}`, session);
     return `MEM-${stateCode}-${districtCode}-${this.pad(sequence, 6)}`;
   }
 

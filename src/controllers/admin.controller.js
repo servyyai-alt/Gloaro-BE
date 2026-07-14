@@ -19,6 +19,7 @@ const { asyncHandler, AppError } = require("../middleware/errorHandler");
 const { sendTemplateEmail } = require("../utils/email");
 const { successResponse, paginatedResponse, getPagination } = require("../utils/response");
 const mongoose = require("mongoose");
+const { runInTransaction } = require("../utils/dbHelper");
 
 const SUPER_CONFIG_KEYS = {
   roles: "superadmin.roles",
@@ -1427,11 +1428,44 @@ exports.transferAdminOrganization = asyncHandler(async (req, res) => {
   if (!admin || (!isAdminRole(admin.role) && admin.role !== "customer")) return res.status(404).json({ success: false, message: "Admin account not found" });
   const meta = getUserMeta(admin);
   const before = meta.adminProfile?.organization;
-  admin.meta = {
-    ...meta,
-    adminProfile: { ...(meta.adminProfile || {}), organization: req.body.organization || {} },
+
+  const performTransfer = async (session) => {
+    if (admin.role === "customer" && req.body.organization?.chapter) {
+      const newChapterId = req.body.organization.chapter;
+      const oldChapterId = before?.chapter;
+      if (newChapterId.toString() !== oldChapterId?.toString()) {
+        const { MAX_MEMBERS_PER_CHAPTER } = require("../constants");
+        const activeCount = await User.countDocuments({
+          role: "customer",
+          "meta.adminProfile.organization.chapter": newChapterId.toString(),
+          isActive: true,
+          isSuspended: { $ne: true },
+          isBlocked: { $ne: true }
+        }).session(session);
+        if (activeCount >= MAX_MEMBERS_PER_CHAPTER) {
+          throw new AppError(
+            `Maximum member limit reached. This Chapter already contains ${MAX_MEMBERS_PER_CHAPTER} active members. Cannot transfer this member.`,
+            409
+          );
+        }
+      }
+    }
+
+    admin.meta = {
+      ...meta,
+      adminProfile: { ...(meta.adminProfile || {}), organization: req.body.organization || {} },
+    };
+    await admin.save({ session });
   };
-  await admin.save();
+
+  if (admin.role === "customer" && req.body.organization?.chapter) {
+    await runInTransaction(async (session) => {
+      await performTransfer(session);
+    });
+  } else {
+    await performTransfer(null);
+  }
+
   await AuditLog.create({ user: req.user._id, action: "admin_organization_transferred", resource: "User", resourceId: admin._id, details: { before, after: req.body.organization }, ipAddress: req.ip, userAgent: req.get("User-Agent") });
   const { password: _, refreshToken: __, ...adminData } = admin.toObject();
   successResponse(res, 200, "Admin organization transferred", adminData);

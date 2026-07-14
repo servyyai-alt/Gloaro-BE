@@ -16,6 +16,7 @@ const getUserOrg = (user) => {
 };
 
 const getScopedUserFilter = (user) => {
+  if (!user) return {};
   const isGlobal = ["superadmin", "admin"].includes(user?.role);
   if (isGlobal) return {};
 
@@ -49,6 +50,7 @@ const getAllowedUserIds = async (user) => {
 };
 
 const getScopedVendorFilter = (user) => {
+  if (!user) return {};
   const isGlobal = ["superadmin", "admin"].includes(user?.role);
   if (isGlobal) return {};
 

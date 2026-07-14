@@ -146,6 +146,8 @@ const PAGINATION = {
   MAX_LIMIT: 100,
 };
 
+const MAX_MEMBERS_PER_CHAPTER = 70;
+
 module.exports = {
   ROLES,
   VENDOR_STATUS,
@@ -165,4 +167,5 @@ module.exports = {
   REFERRAL_STATUS,
   UPLOAD_LIMITS,
   PAGINATION,
+  MAX_MEMBERS_PER_CHAPTER,
 };

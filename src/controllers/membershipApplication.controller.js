@@ -4,11 +4,12 @@ const EnterpriseRecord = require("../models/EnterpriseRecord");
 const mongoose = require("mongoose");
 const Notification = require("../models/Notification");
 const { cloudinary } = require("../config/cloudinary");
-const { asyncHandler } = require("../middleware/errorHandler");
+const { AppError, asyncHandler } = require("../middleware/errorHandler");
 const { successResponse, paginatedResponse, getPagination } = require("../utils/response");
 const { sendTemplateEmail } = require("../utils/email");
 const { resolveHierarchy, resolveOfficials } = require("../utils/hierarchyHelper");
 const idGenerator = require("../services/idGenerator.service");
+const { runInTransaction } = require("../utils/dbHelper");
 
 const getUserMeta = (user) => {
   if (!user?.meta) return {};
@@ -394,51 +395,127 @@ exports.updateApplicationStatus = asyncHandler(async (req, res) => {
   }
 
   const previousStatus = application.status;
-  application.status = status;
-  if (adminNotes) application.adminNotes = adminNotes;
-  application.reviewedBy = req.user._id;
-  application.reviewedAt = new Date();
-
   let generatedMemberId = "";
 
-  if (status === "approved" && application.submittedBy) {
-    const user = await User.findById(application.submittedBy);
-    if (user) {
-      user.isActive = true;
-      user.isEmailVerified = true;
-      if (!user.memberId) {
-        const stateRecord = await EnterpriseRecord.findById(application.stateId);
-        const districtRecord = await EnterpriseRecord.findById(application.districtId);
-        const stateCode = stateRecord?.code || String(application.address?.state || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 2);
-        const districtCode = districtRecord?.code || String(application.address?.city || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 3);
-
-        if (stateCode && districtCode) {
-          user.memberId = await idGenerator.generateMemberId({ stateCode, districtCode });
+  const performSave = async (session) => {
+    if (status === "approved") {
+      let targetChapterId = application.chapterId;
+      if (!targetChapterId && application.submittedBy) {
+        const applicant = await User.findById(application.submittedBy).session(session);
+        if (applicant) {
+          const userMeta = getUserMeta(applicant);
+          targetChapterId = userMeta.adminProfile?.organization?.chapter || userMeta.memberProfile?.organization?.chapter;
         }
       }
-      generatedMemberId = user.memberId || "";
-      await user.save({ validateBeforeSave: false });
+
+      if (!targetChapterId) {
+        throw new AppError("Unable to determine chapter for this membership application.", 400);
+      }
+
+      const { MAX_MEMBERS_PER_CHAPTER } = require("../constants");
+      const activeCount = await User.countDocuments({
+        role: "customer",
+        "meta.adminProfile.organization.chapter": targetChapterId.toString(),
+        isActive: true,
+        isSuspended: { $ne: true },
+        isBlocked: { $ne: true }
+      }).session(session);
+
+      if (activeCount >= MAX_MEMBERS_PER_CHAPTER) {
+        throw new AppError(
+          `Maximum member limit reached. This Chapter already contains ${MAX_MEMBERS_PER_CHAPTER} active members. Cannot approve this membership.`,
+          409
+        );
+      }
     }
 
-    application.approvedBy = req.user._id;
-    application.approvedRole = role;
-    application.approvedAt = new Date();
-  } else if (status === "rejected") {
-    application.rejectionReason = adminNotes || "Requirements not met";
+    application.status = status;
+    if (adminNotes) application.adminNotes = adminNotes;
+    application.reviewedBy = req.user._id;
+    application.reviewedAt = new Date();
+
+    if (status === "approved" && application.submittedBy) {
+      const user = await User.findById(application.submittedBy).session(session);
+      if (user) {
+        user.isActive = true;
+        user.isEmailVerified = true;
+        if (!user.memberId) {
+          const stateRecord = await EnterpriseRecord.findById(application.stateId).session(session);
+          const districtRecord = await EnterpriseRecord.findById(application.districtId).session(session);
+          const stateCode = stateRecord?.code || String(application.address?.state || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 2);
+          const districtCode = districtRecord?.code || String(application.address?.city || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 3);
+
+          if (stateCode && districtCode) {
+            user.memberId = await idGenerator.generateMemberId({ stateCode, districtCode }, session);
+          }
+        }
+        generatedMemberId = user.memberId || "";
+
+        // Sync user organization metadata
+        const userMeta = getUserMeta(user);
+        user.meta = {
+          ...userMeta,
+          adminProfile: {
+            ...(userMeta.adminProfile || {}),
+            organization: {
+              region: application.regionId?.toString(),
+              state: application.stateId?.toString(),
+              district: application.districtId?.toString(),
+              chapter: application.chapterId?.toString(),
+            }
+          }
+        };
+
+        await user.save({ session, validateBeforeSave: false });
+      }
+
+      application.approvedBy = req.user._id;
+      application.approvedRole = role;
+      application.approvedAt = new Date();
+    } else if (status === "rejected") {
+      application.rejectionReason = adminNotes || "Requirements not met";
+    }
+
+    // Record workflow history step
+    application.workflowHistory.push({
+      user: req.user._id,
+      role,
+      action: status,
+      remarks: adminNotes || `Status updated to ${status}`,
+      timestamp: new Date(),
+      previousStatus,
+      newStatus: status,
+    });
+
+    await application.save({ session });
+
+    // Audit Logging for Membership Approval/Rejection/Forwarding
+    const AuditLog = require("../models/AuditLog");
+    await AuditLog.create([{
+      user: req.user._id,
+      action: `membership_${status}`,
+      resource: "MembershipApplication",
+      resourceId: application._id,
+      details: {
+        applicationNumber: application.applicationNumber,
+        previousStatus,
+        newStatus: status,
+        remarks: adminNotes || null,
+        ipAddress: req.ip,
+        device: req.get("User-Agent")
+      },
+      ipAddress: req.ip,
+      userAgent: req.get("User-Agent")
+    }], { session });
+  };
+
+  if (status === "approved" && (application.chapterId || application.submittedBy)) {
+    await runInTransaction(async (session) => {
+      await performSave(session);
+    });
+  } else {
+    await performSave(null);
   }
-
-  // Record workflow history step
-  application.workflowHistory.push({
-    user: req.user._id,
-    role,
-    action: status,
-    remarks: adminNotes || `Status updated to ${status}`,
-    timestamp: new Date(),
-    previousStatus,
-    newStatus: status,
-  });
-
-  await application.save();
 
   // Create notifications and trigger socket event
   const recipientIds = [
@@ -500,24 +577,6 @@ exports.updateApplicationStatus = asyncHandler(async (req, res) => {
     }
   }
 
-  // Audit Logging for Membership Approval/Rejection/Forwarding
-  const AuditLog = require("../models/AuditLog");
-  await AuditLog.create({
-    user: req.user._id,
-    action: `membership_${status}`,
-    resource: "MembershipApplication",
-    resourceId: application._id,
-    details: {
-      applicationNumber: application.applicationNumber,
-      previousStatus,
-      newStatus: status,
-      remarks: adminNotes || null,
-      ipAddress: req.ip,
-      device: req.get("User-Agent")
-    },
-    ipAddress: req.ip,
-    userAgent: req.get("User-Agent")
-  });
 
   successResponse(res, 200, "Membership application updated", application);
 });
