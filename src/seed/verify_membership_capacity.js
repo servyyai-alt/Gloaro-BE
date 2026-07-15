@@ -134,7 +134,7 @@ async function run() {
 
   // Step 6: Log in as Super Admin
   console.log("Step 1: Logging in as Super Admin...");
-  const adminAuth = await login("superadmin@vendordirectory.com", "Password@123");
+  const adminAuth = await login("superadmin@vendordirectory.com", "SuperAdmin@123");
   console.log("[PASS] Super Admin logged in.");
 
   // Step 7: Attempt to approve the 71st member

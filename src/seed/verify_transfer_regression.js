@@ -115,7 +115,7 @@ async function run() {
   await User.insertMany(mockUsersB);
 
   // Log in as Super Admin
-  const adminAuth = await login("superadmin@vendordirectory.com", "Password@123");
+  const adminAuth = await login("superadmin@vendordirectory.com", "SuperAdmin@123");
   console.log("[PASS] Super Admin logged in.");
 
   const countA1 = await User.countDocuments({ role: "customer", "meta.adminProfile.organization.chapter": chapterA._id.toString(), isActive: true });

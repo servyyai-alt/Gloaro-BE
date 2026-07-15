@@ -228,9 +228,9 @@ exports.getApplications = asyncHandler(async (req, res) => {
       filter.regionId = locationIds.regionId || new mongoose.Types.ObjectId();
     } else if (role === "state_director") {
       filter.stateId = locationIds.stateId || new mongoose.Types.ObjectId();
-    } else if (["executive_director", "district_director"].includes(role)) {
+    } else if (role === "district_director") {
       filter.districtId = locationIds.districtId || new mongoose.Types.ObjectId();
-    } else if (["launch_director", "direct_consultant", "chapter_president", "vice_president"].includes(role)) {
+    } else if (["executive_director", "launch_director", "direct_consultant", "chapter_president", "vice_president"].includes(role)) {
       filter.chapterId = locationIds.chapterId || new mongoose.Types.ObjectId();
     } else {
       // Any other user should only see their own applications
@@ -240,8 +240,9 @@ exports.getApplications = asyncHandler(async (req, res) => {
 
   if (req.query.export === "csv") {
     const applications = await MembershipApplication.find(filter)
-      .populate("submittedBy", "name email role")
+      .populate("submittedBy", "name email role memberId")
       .populate("reviewedBy", "name email")
+      .populate("vicePresidentId", "name email")
       .populate("regionId", "name code")
       .populate("stateId", "name code")
       .populate("districtId", "name code")
@@ -264,8 +265,9 @@ exports.getApplications = asyncHandler(async (req, res) => {
 
   const [applications, total] = await Promise.all([
     MembershipApplication.find(filter)
-      .populate("submittedBy", "name email role")
+      .populate("submittedBy", "name email role memberId")
       .populate("reviewedBy", "name email")
+      .populate("vicePresidentId", "name email")
       .populate("regionId", "name code")
       .populate("stateId", "name code")
       .populate("districtId", "name code")
@@ -337,11 +339,12 @@ exports.updateApplicationStatus = asyncHandler(async (req, res) => {
   if (!application) return res.status(404).json({ success: false, message: "Membership application not found" });
 
   const role = req.user.role;
-  if (role === "admin" || role === "vice_president") {
+  if (role === "vice_president") {
     return res.status(403).json({ success: false, message: "You do not have permission to approve or reject membership applications." });
   }
 
   const isSuperAdmin = role === "superadmin";
+  const isAdmin = role === "admin";
   const userOrg = getUserMeta(req.user)?.adminProfile?.organization || {};
 
   const isDirectConsultant = role === "direct_consultant" && (
@@ -354,9 +357,9 @@ exports.updateApplicationStatus = asyncHandler(async (req, res) => {
     userOrg.chapter?.toString() === application.chapterId?.toString()
   );
 
-  let isAuthorized = isSuperAdmin || isDirectConsultant || isExecutiveDirector;
+  let isAuthorized = isSuperAdmin || isAdmin || isDirectConsultant || isExecutiveDirector;
 
-  // Check PBAC fallback but restrict it for non-admin/non-vp
+  // Check PBAC fallback but restrict it for non-vp
   if (!isAuthorized) {
     const meta = getUserMeta(req.user);
     const profile = meta.adminProfile || {};
@@ -377,7 +380,7 @@ exports.updateApplicationStatus = asyncHandler(async (req, res) => {
   }
 
   if (!isAuthorized) {
-    return res.status(403).json({ success: false, message: "Only the assigned Direct Consultant, Executive Director, or Super Admin can approve or reject this membership application." });
+    return res.status(403).json({ success: false, message: "Only the assigned Direct Consultant, Executive Director, Admin, or Super Admin can approve or reject this membership application." });
   }
 
   // If status is forwarded, Direct Consultant cannot approve or reject
@@ -390,193 +393,101 @@ exports.updateApplicationStatus = asyncHandler(async (req, res) => {
     return res.status(400).json({ success: false, message: "Invalid action status. Must be approved, rejected, or forwarded." });
   }
 
-  if (status === "forwarded" && !isDirectConsultant && !isSuperAdmin) {
-    return res.status(403).json({ success: false, message: "Only the Direct Consultant or Super Admin can forward the application to the Executive Director." });
-  }
-
-  const previousStatus = application.status;
-  let generatedMemberId = "";
-
-  const performSave = async (session) => {
-    if (status === "approved") {
-      let targetChapterId = application.chapterId;
-      if (!targetChapterId && application.submittedBy) {
-        const applicant = await User.findById(application.submittedBy).session(session);
-        if (applicant) {
-          const userMeta = getUserMeta(applicant);
-          targetChapterId = userMeta.adminProfile?.organization?.chapter || userMeta.memberProfile?.organization?.chapter;
-        }
-      }
-
-      if (!targetChapterId) {
-        throw new AppError("Unable to determine chapter for this membership application.", 400);
-      }
-
-      const { MAX_MEMBERS_PER_CHAPTER } = require("../constants");
-      const activeCount = await User.countDocuments({
-        role: "customer",
-        "meta.adminProfile.organization.chapter": targetChapterId.toString(),
-        isActive: true,
-        isSuspended: { $ne: true },
-        isBlocked: { $ne: true }
-      }).session(session);
-
-      if (activeCount >= MAX_MEMBERS_PER_CHAPTER) {
-        throw new AppError(
-          `Maximum member limit reached. This Chapter already contains ${MAX_MEMBERS_PER_CHAPTER} active members. Cannot approve this membership.`,
-          409
-        );
-      }
+  if (status === "forwarded") {
+    if (!isDirectConsultant && !isSuperAdmin) {
+      return res.status(403).json({ success: false, message: "Only the Direct Consultant or Super Admin can forward the application to the Executive Director." });
     }
 
-    application.status = status;
+    const previousStatus = application.status;
+    application.status = "forwarded";
     if (adminNotes) application.adminNotes = adminNotes;
     application.reviewedBy = req.user._id;
     application.reviewedAt = new Date();
 
-    if (status === "approved" && application.submittedBy) {
-      const user = await User.findById(application.submittedBy).session(session);
-      if (user) {
-        user.isActive = true;
-        user.isEmailVerified = true;
-        if (!user.memberId) {
-          const stateRecord = await EnterpriseRecord.findById(application.stateId).session(session);
-          const districtRecord = await EnterpriseRecord.findById(application.districtId).session(session);
-          const stateCode = stateRecord?.code || String(application.address?.state || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 2);
-          const districtCode = districtRecord?.code || String(application.address?.city || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 3);
-
-          if (stateCode && districtCode) {
-            user.memberId = await idGenerator.generateMemberId({ stateCode, districtCode }, session);
-          }
-        }
-        generatedMemberId = user.memberId || "";
-
-        // Sync user organization metadata
-        const userMeta = getUserMeta(user);
-        user.meta = {
-          ...userMeta,
-          adminProfile: {
-            ...(userMeta.adminProfile || {}),
-            organization: {
-              region: application.regionId?.toString(),
-              state: application.stateId?.toString(),
-              district: application.districtId?.toString(),
-              chapter: application.chapterId?.toString(),
-            }
-          }
-        };
-
-        await user.save({ session, validateBeforeSave: false });
-      }
-
-      application.approvedBy = req.user._id;
-      application.approvedRole = role;
-      application.approvedAt = new Date();
-    } else if (status === "rejected") {
-      application.rejectionReason = adminNotes || "Requirements not met";
-    }
-
-    // Record workflow history step
+    // Push to workflowHistory
     application.workflowHistory.push({
       user: req.user._id,
       role,
-      action: status,
-      remarks: adminNotes || `Status updated to ${status}`,
+      action: "forwarded",
+      remarks: adminNotes || "Forwarded to Executive Director",
       timestamp: new Date(),
       previousStatus,
-      newStatus: status,
+      newStatus: "forwarded",
     });
 
-    await application.save({ session });
+    await application.save();
 
-    // Audit Logging for Membership Approval/Rejection/Forwarding
+    // Audit Logging
     const AuditLog = require("../models/AuditLog");
-    await AuditLog.create([{
+    await AuditLog.create({
       user: req.user._id,
-      action: `membership_${status}`,
+      action: "membership_forwarded",
       resource: "MembershipApplication",
       resourceId: application._id,
       details: {
         applicationNumber: application.applicationNumber,
         previousStatus,
-        newStatus: status,
+        newStatus: "forwarded",
         remarks: adminNotes || null,
         ipAddress: req.ip,
         device: req.get("User-Agent")
       },
       ipAddress: req.ip,
       userAgent: req.get("User-Agent")
-    }], { session });
-  };
-
-  if (status === "approved" && (application.chapterId || application.submittedBy)) {
-    await runInTransaction(async (session) => {
-      await performSave(session);
     });
-  } else {
-    await performSave(null);
-  }
 
-  // Create notifications and trigger socket event
-  const recipientIds = [
-    application.vicePresidentId?.toString(),
-    application.chapterPresidentId?.toString(),
-    application.directConsultantId?.toString(),
-    application.launchDirectorId?.toString(),
-    application.executiveDirectorId?.toString(),
-    application.districtDirectorId?.toString(),
-    application.stateDirectorId?.toString(),
-    application.regionDirectorId?.toString()
-  ].filter(Boolean);
+    // Create notifications and trigger socket event
+    const recipientIds = [
+      application.vicePresidentId?.toString(),
+      application.chapterPresidentId?.toString(),
+      application.directConsultantId?.toString(),
+      application.launchDirectorId?.toString(),
+      application.executiveDirectorId?.toString(),
+      application.districtDirectorId?.toString(),
+      application.stateDirectorId?.toString(),
+      application.regionDirectorId?.toString()
+    ].filter(Boolean);
 
-  const adminUsers = await User.find({ role: { $in: ["admin", "superadmin"] } }).select("_id email name");
-  const adminIds = adminUsers.map((a) => a._id.toString());
-  const allRecipients = [...new Set([...recipientIds, ...adminIds])];
+    const adminUsers = await User.find({ role: { $in: ["admin", "superadmin"] } }).select("_id email name");
+    const adminIds = adminUsers.map((a) => a._id.toString());
+    const allRecipients = [...new Set([...recipientIds, ...adminIds])];
 
-  const notificationTitle = status === "approved" ? "Membership Approved" : (status === "rejected" ? "Membership Rejected" : "Membership Forwarded");
-  const notificationMessage = status === "approved"
-    ? `Application ${application.applicationNumber} has been approved. Member ID: ${generatedMemberId}`
-    : (status === "rejected" ? `Application ${application.applicationNumber} has been rejected. Reason: ${adminNotes || "Requirements not met"}` : `Application ${application.applicationNumber} has been forwarded to Executive Director.`);
-
-  const notificationService = require("../services/notification.service");
-  if (allRecipients.length > 0) {
-    await notificationService.sendBulkNotifications({
-      recipientIds: allRecipients,
-      type: status === "approved" ? "membership_approved" : (status === "rejected" ? "membership_rejected" : "system"),
-      title: notificationTitle,
-      message: notificationMessage,
-      link: `/admin/applications/membership/${application._id}`
-    });
-  }
-
-  // Notify applicant via email & push notification
-  if (application.submittedBy) {
-    const applicantUser = await User.findById(application.submittedBy).select("email name");
-    if (applicantUser) {
-      if (status === "approved") {
-        await notificationService.sendNotification({
-          recipientId: applicantUser._id,
-          type: "membership_approved",
-          title: "Membership Application Approved",
-          message: `Congratulations! Your membership application has been approved. Member ID: ${generatedMemberId}`,
-          link: "/membership/dashboard",
-          emailTemplate: "membershipApplicationApproved",
-          emailParams: [applicantUser.name, application.applicationNumber, generatedMemberId]
-        });
-      } else if (status === "rejected") {
-        await notificationService.sendNotification({
-          recipientId: applicantUser._id,
-          type: "membership_rejected",
-          title: "Membership Application Status Update",
-          message: `Your membership application has been rejected. Reason: ${adminNotes || "Requirements not met"}`,
-          link: "/membership-application",
-          emailTemplate: "membershipApplicationRejected",
-          emailParams: [applicantUser.name, application.applicationNumber, adminNotes || "Requirements not met"]
-        });
-      }
+    const notificationService = require("../services/notification.service");
+    if (allRecipients.length > 0) {
+      await notificationService.sendBulkNotifications({
+        recipientIds: allRecipients,
+        type: "system",
+        title: "Membership Forwarded",
+        message: `Application ${application.applicationNumber} has been forwarded to Executive Director.`,
+        link: `/admin/applications/membership/${application._id}`
+      });
     }
+
+    // Socket emission
+    const { getSocketIO } = require("../sockets");
+    const io = getSocketIO();
+    if (io) {
+      allRecipients.forEach((recId) => {
+        io.to(`user:${recId}`).emit("notification", {
+          title: "Membership Forwarded",
+          message: `Application ${application.applicationNumber} has been forwarded to Executive Director.`,
+          link: `/admin/applications/membership/${application._id}`
+        });
+      });
+    }
+
+    return successResponse(res, 200, "Membership application forwarded", application);
+  } else {
+    // Call unified approval logic helper
+    const { processMembershipApproval } = require("../helpers/approvalHelper");
+    const updatedApplication = await processMembershipApproval(
+      application._id,
+      status,
+      adminNotes,
+      req.user,
+      req.ip,
+      req.get("User-Agent")
+    );
+    return successResponse(res, 200, "Membership application updated", updatedApplication);
   }
-
-
-  successResponse(res, 200, "Membership application updated", application);
 });

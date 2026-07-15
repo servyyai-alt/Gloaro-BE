@@ -26,7 +26,7 @@ const inferAdminModule = (path) => {
   if (path.startsWith("/enterprise/search")) return "settings";
   if (path.includes("vendor")) return "vendors";
   if (path.includes("marketplace") || path.includes("products") || path.includes("services") || path.includes("banners")) return "marketplace";
-  if (path.includes("membership") || path.includes("users") || path.includes("plans")) return "members";
+  if (path.includes("membership") || path.includes("users") || path.includes("plans") || path.includes("members")) return "members";
   if (path.includes("visitor")) return "visitors";
   if (path.includes("meeting")) return "meetings";
   if (path.includes("attendance")) return "attendance";
@@ -166,6 +166,7 @@ router.get("/audit-logs", adminController.getAuditLogs);
 router.get("/system-stats", authorize("superadmin"), adminController.getSystemStats);
 router.get("/system-logs", authorize("superadmin"), adminController.getSystemLogs);
 router.get("/admin-accounts", authorize(...ADMIN_ROLE_VALUES), adminController.getAdminAccounts);
+router.get("/members", authorize(...ADMIN_ROLE_VALUES), adminController.getApprovedMembers);
 router.post(
   "/admin-accounts",
   authorize(...ADMIN_ROLE_VALUES),
