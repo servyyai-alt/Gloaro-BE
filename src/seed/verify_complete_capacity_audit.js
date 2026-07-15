@@ -56,7 +56,7 @@ async function run() {
   console.log(`Created test hierarchy. Chapter A ID: ${chapterA._id}, Chapter B ID: ${chapterB._id}`);
 
   // Log in as Super Admin to perform actions
-  const adminAuth = await login("superadmin@vendordirectory.com", "Password@123");
+  const adminAuth = await login("superadmin@vendordirectory.com", "SuperAdmin@123");
   console.log("[PASS] Super Admin logged in.");
 
   // Helper to create and approve a member
@@ -376,7 +376,7 @@ async function run() {
   }
 
   // Approve a pending member (Case 3 success)
-  const anotherPendingApp = concurrentApps.find(app => app._id.toString() !== pendingRejectApp._id.toString());
+  const anotherPendingApp = await MembershipApplication.findOne({ _id: { $in: concurrentApps.map(a => a._id) }, status: "submitted" });
   console.log("Approving a member to check if slot is filled...");
   const approveResCase3 = await fetch(`${BASE_URL}/membership-applications/${anotherPendingApp._id}/status`, {
     method: "PATCH",
@@ -417,7 +417,7 @@ async function run() {
   }
 
   // Approve another member
-  const anotherPendingApp2 = concurrentApps.find(app => app._id.toString() !== pendingRejectApp._id.toString() && app._id.toString() !== anotherPendingApp._id.toString());
+  const anotherPendingApp2 = await MembershipApplication.findOne({ _id: { $in: concurrentApps.map(a => a._id) }, status: "submitted" });
   const approveResCase4 = await fetch(`${BASE_URL}/membership-applications/${anotherPendingApp2._id}/status`, {
     method: "PATCH",
     headers: {
@@ -455,7 +455,7 @@ async function run() {
   }
 
   // Approve another member
-  const anotherPendingApp3 = concurrentApps.find(app => app._id.toString() !== pendingRejectApp._id.toString() && app._id.toString() !== anotherPendingApp._id.toString() && app._id.toString() !== anotherPendingApp2._id.toString());
+  const anotherPendingApp3 = await MembershipApplication.findOne({ _id: { $in: concurrentApps.map(a => a._id) }, status: "submitted" });
   const approveResCase5 = await fetch(`${BASE_URL}/membership-applications/${anotherPendingApp3._id}/status`, {
     method: "PATCH",
     headers: {

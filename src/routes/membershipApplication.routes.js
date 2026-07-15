@@ -5,6 +5,7 @@ const membershipApplicationController = require("../controllers/membershipApplic
 const { uploadDocumentMemoryFields, uploadMemoryDocumentsToCloudinary } = require("../config/cloudinary");
 const { protect, authorize, optionalAuth } = require("../middleware/auth");
 const { validate } = require("../middleware/validate");
+const { ADMIN_ROLE_VALUES } = require("../constants/adminRoles");
 
 const parseApplicationDocuments = uploadDocumentMemoryFields(
   [
@@ -26,7 +27,7 @@ router.post(
 );
 router.get("/track", membershipApplicationController.trackApplication);
 
-router.use(protect, authorize("admin", "superadmin"));
+router.use(protect, authorize(...ADMIN_ROLE_VALUES));
 
 router.get("/", membershipApplicationController.getApplications);
 router.get("/:id/documents/:field/url", membershipApplicationController.getApplicationDocumentUrl);

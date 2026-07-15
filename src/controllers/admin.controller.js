@@ -1246,6 +1246,52 @@ exports.createAdminAccount = asyncHandler(async (req, res) => {
   applyAdminProfile(admin, buildAdminProfile(profileBody));
   await admin.save();
 
+  // Create corresponding MembershipApplication if it is a customer (member) registered by Vice President
+  if (role === "customer") {
+    try {
+      const MembershipApplication = require("../models/MembershipApplication");
+      const { resolveHierarchy, resolveOfficials } = require("../utils/hierarchyHelper");
+      
+      const hierarchy = await resolveHierarchy({
+        regionId: childOrg.region,
+        stateId: childOrg.state,
+        districtId: childOrg.district,
+        chapterId: childOrg.chapter,
+      });
+
+      const officials = await resolveOfficials(hierarchy);
+
+      await MembershipApplication.create({
+        applicationNumber: await idGenerator.generateGenericModuleId("membership_application"),
+        step: 3,
+        status: "submitted",
+        personal: {
+          fullName: name,
+          mobileNumber: phone,
+          emailAddress: email,
+        },
+        submittedBy: admin._id,
+        regionId: childOrg.region,
+        stateId: childOrg.state,
+        districtId: childOrg.district,
+        chapterId: childOrg.chapter,
+        vicePresidentId: req.user._id,
+        ...officials,
+        workflowHistory: [{
+          user: req.user._id,
+          role: creatorRole,
+          action: "submit",
+          remarks: "Registered by Vice President",
+          timestamp: new Date(),
+          previousStatus: "draft",
+          newStatus: "submitted",
+        }]
+      });
+    } catch (err) {
+      console.error("Failed to automatically create MembershipApplication for registered customer:", err);
+    }
+  }
+
   // 5. Audit Log Creation
   await AuditLog.create({
     user: req.user._id,
@@ -1342,30 +1388,52 @@ exports.updateAdminAccountStatus = asyncHandler(async (req, res) => {
   if (!admin || (!isAdminRole(admin.role) && admin.role !== "customer")) {
     return res.status(404).json({ success: false, message: "Account not found" });
   }
+
+  // Delegate customer approval/rejection to helper logic
+  if (admin.role === "customer" && (action === "approve" || action === "reject")) {
+    const MembershipApplication = require("../models/MembershipApplication");
+    const application = await MembershipApplication.findOne({
+      $or: [
+        { submittedBy: admin._id },
+        { submittedBy: admin._id.toString() }
+      ]
+    });
+    
+    const { processMembershipApproval, processLegacyMembershipApproval } = require("../helpers/approvalHelper");
+    const targetStatus = action === "approve" ? "approved" : "rejected";
+    const notes = req.body.reason || "Processed via user status update";
+
+    if (application) {
+      await processMembershipApproval(
+        application._id,
+        targetStatus,
+        notes,
+        req.user,
+        req.ip,
+        req.get("User-Agent")
+      );
+    } else {
+      // Legacy handling compatibility path
+      await processLegacyMembershipApproval(
+        admin._id,
+        targetStatus,
+        notes,
+        req.user,
+        req.ip,
+        req.get("User-Agent")
+      );
+    }
+
+    const refreshedUser = await User.findById(admin._id);
+    const { password: _, refreshToken: __, ...adminData } = refreshedUser.toObject();
+    return successResponse(res, 200, "Status updated successfully", adminData);
+  }
+
   const before = { isActive: admin.isActive, isSuspended: admin.isSuspended, isBlocked: admin.isBlocked, status: admin.status };
   if (action === "suspend") Object.assign(admin, { isSuspended: true, suspendedAt: new Date(), suspendedReason: req.body.reason });
   if (action === "activate") Object.assign(admin, { isActive: true, isSuspended: false, isBlocked: false, suspendedReason: undefined, blockedReason: undefined });
   if (action === "lock") Object.assign(admin, { isBlocked: true, blockedAt: new Date(), blockedReason: req.body.reason });
   if (action === "unlock") Object.assign(admin, { isBlocked: false, blockedReason: undefined, loginAttempts: 0, lockUntil: undefined });
-  if (action === "approve") {
-    admin.status = "approved";
-    if (admin.role === "customer" && !admin.memberId) {
-      const meta = getUserMeta(admin);
-      const org = meta.adminProfile?.organization || {};
-      const stateRecord = org.state ? await EnterpriseRecord.findById(org.state) : null;
-      const districtRecord = org.district ? await EnterpriseRecord.findById(org.district) : null;
-      const stateCode = stateRecord?.code || "GL";
-      const districtCode = districtRecord?.code || "GLO";
-      const generatedMemberId = await idGenerator.generateMemberId({ stateCode, districtCode });
-      
-      // Perform direct database update to bypass Mongoose's immutable: true check for this one-time assignment
-      await User.collection.updateOne(
-        { _id: admin._id, memberId: { $exists: false } },
-        { $set: { memberId: generatedMemberId } }
-      );
-      admin.memberId = generatedMemberId;
-    }
-  }
   if (action === "reject") Object.assign(admin, { status: "rejected" });
   await admin.save();
 
@@ -1478,4 +1546,183 @@ exports.getAdminActivity = asyncHandler(async (req, res) => {
     AuditLog.countDocuments({ user: req.params.id }),
   ]);
   paginatedResponse(res, logs, page, limit, total, "Admin activity retrieved");
+});
+
+exports.getApprovedMembers = asyncHandler(async (req, res) => {
+  const { page, limit, skip } = getPagination(req.query);
+
+  // Initial match for approved customers
+  const matchUser = {
+    role: "customer",
+    status: "approved"
+  };
+
+  const pipeline = [
+    { $match: matchUser },
+    
+    // Lookup MembershipApplication
+    {
+      $lookup: {
+        from: "membershipapplications",
+        localField: "_id",
+        foreignField: "submittedBy",
+        as: "application"
+      }
+    },
+    { $unwind: { path: "$application", preserveNullAndEmptyArrays: true } },
+
+    // Lookup Membership
+    {
+      $lookup: {
+        from: "memberships",
+        localField: "_id",
+        foreignField: "user",
+        as: "membership"
+      }
+    },
+    { $unwind: { path: "$membership", preserveNullAndEmptyArrays: true } },
+
+    // Lookup Approved By User details
+    {
+      $lookup: {
+        from: "users",
+        localField: "application.approvedBy",
+        foreignField: "_id",
+        as: "approver"
+      }
+    },
+    { $unwind: { path: "$approver", preserveNullAndEmptyArrays: true } },
+
+    // Lookup Enterprise Records for Location Names
+    {
+      $lookup: {
+        from: "enterpriserecords",
+        localField: "application.regionId",
+        foreignField: "_id",
+        as: "region"
+      }
+    },
+    { $unwind: { path: "$region", preserveNullAndEmptyArrays: true } },
+
+    {
+      $lookup: {
+        from: "enterpriserecords",
+        localField: "application.stateId",
+        foreignField: "_id",
+        as: "state"
+      }
+    },
+    { $unwind: { path: "$state", preserveNullAndEmptyArrays: true } },
+
+    {
+      $lookup: {
+        from: "enterpriserecords",
+        localField: "application.districtId",
+        foreignField: "_id",
+        as: "district"
+      }
+    },
+    { $unwind: { path: "$district", preserveNullAndEmptyArrays: true } },
+
+    {
+      $lookup: {
+        from: "enterpriserecords",
+        localField: "application.chapterId",
+        foreignField: "_id",
+        as: "chapter"
+      }
+    },
+    { $unwind: { path: "$chapter", preserveNullAndEmptyArrays: true } },
+
+    // Project output fields
+    {
+      $project: {
+        _id: 1,
+        memberId: 1,
+        name: 1,
+        email: 1,
+        phone: 1,
+        status: 1,
+        isActive: 1,
+        isSuspended: 1,
+        isBlocked: 1,
+        membershipPlan: { $ifNull: ["$membership.plan", "silver"] },
+        region: "$region.name",
+        regionId: "$region._id",
+        state: "$state.name",
+        stateId: "$state._id",
+        district: "$district.name",
+        districtId: "$district._id",
+        chapter: "$chapter.name",
+        chapterId: "$chapter._id",
+        approvedBy: { $ifNull: ["$approver.name", "$approver.email"] },
+        approvedById: "$approver._id",
+        approvedRole: { $ifNull: ["$application.approvedRole", "admin"] },
+        approvedAt: { $ifNull: ["$application.approvedAt", "$createdAt"] },
+        createdAt: 1
+      }
+    }
+  ];
+
+  // Apply filters after projection
+  const matchFilter = {};
+  if (req.query.region) matchFilter.regionId = new mongoose.Types.ObjectId(req.query.region);
+  if (req.query.state) matchFilter.stateId = new mongoose.Types.ObjectId(req.query.state);
+  if (req.query.district) matchFilter.districtId = new mongoose.Types.ObjectId(req.query.district);
+  if (req.query.chapter) matchFilter.chapterId = new mongoose.Types.ObjectId(req.query.chapter);
+  if (req.query.plan) matchFilter.membershipPlan = req.query.plan;
+  
+  if (req.query.status) {
+    if (req.query.status === "active") {
+      matchFilter.isActive = true;
+      matchFilter.isSuspended = { $ne: true };
+      matchFilter.isBlocked = { $ne: true };
+    } else if (req.query.status === "suspended") {
+      matchFilter.isSuspended = true;
+    } else if (req.query.status === "blocked") {
+      matchFilter.isBlocked = true;
+    }
+  }
+
+  if (req.query.approvedBy) {
+    matchFilter.approvedBy = new RegExp(req.query.approvedBy, "i");
+  }
+
+  if (req.query.startDate && req.query.endDate) {
+    matchFilter.approvedAt = {
+      $gte: new Date(req.query.startDate),
+      $lte: new Date(req.query.endDate)
+    };
+  }
+
+  if (req.query.search) {
+    const searchRegex = new RegExp(req.query.search, "i");
+    matchFilter.$or = [
+      { name: searchRegex },
+      { email: searchRegex },
+      { phone: searchRegex },
+      { memberId: searchRegex }
+    ];
+  }
+
+  if (Object.keys(matchFilter).length > 0) {
+    pipeline.push({ $match: matchFilter });
+  }
+
+  // Sort by newest approved first
+  pipeline.push({ $sort: { approvedAt: -1, createdAt: -1 } });
+
+  // Facet stage for count & skip/limit
+  pipeline.push({
+    $facet: {
+      metadata: [{ $count: "total" }],
+      data: [{ $skip: skip }, { $limit: limit }]
+    }
+  });
+
+  const result = await User.aggregate(pipeline);
+  const total = result[0]?.metadata[0]?.total || 0;
+  const data = result[0]?.data || [];
+
+  paginatedResponse(res, data, page, limit, total, "Approved members list retrieved");
 });
