@@ -188,10 +188,19 @@ exports.validateReferral = asyncHandler(async (req, res) => {
     const chapterName = referrer.meta?.adminProfile?.organization?.chapterName || "Sultanpur";
     return res.status(200).json({
       success: true,
+      valid: true,
       data: {
         referredBy: referrer.name,
+        assignedVendor: "None",
         chapter: chapterName,
+        memberId: referrer.officialId || referrer.memberId || referrer._id,
         status: "Valid Referral Code"
+      },
+      referrer: {
+        id: referrer._id,
+        name: referrer.name,
+        chapter: chapterName,
+        role: referrer.role
       }
     });
   }
@@ -206,17 +215,29 @@ exports.validateReferral = asyncHandler(async (req, res) => {
       const chapterName = refUser?.meta?.adminProfile?.organization?.chapterName || "Sultanpur";
       return res.status(200).json({
         success: true,
+        valid: true,
         data: {
           referredBy: refUser?.name || "Member1",
           assignedVendor: vendor?.businessName || "ABC Technologies",
           chapter: chapterName,
+          memberId: refUser?.officialId || refUser?.memberId || refUser?._id,
           status: "Valid Referral Code"
+        },
+        referrer: {
+          id: refUser?._id,
+          name: refUser?.name || "Member1",
+          chapter: chapterName,
+          role: refUser?.role || "customer"
         }
       });
     }
   }
 
-  return res.status(404).json({ success: false, message: "Invalid Referral Code" });
+  return res.status(400).json({
+    success: false,
+    valid: false,
+    message: "Invalid referral code."
+  });
 });
 
 const sanitizeUser = (user) => {
