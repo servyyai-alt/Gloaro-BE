@@ -38,14 +38,17 @@ class AuthService {
       }
     }
 
+    const finalRole = ["vendor", "customer", "user"].includes(role) ? (role === "user" ? "customer" : role) : "customer";
+
     const user = await User.create({
       name,
       email,
       phone,
       password,
-      role: ["vendor", "customer", "user"].includes(role) ? (role === "user" ? "customer" : role) : "customer",
+      role: finalRole,
       referredBy: referrer?._id,
       referralCode: await idGenerator.generateMemberReferralCode(),
+      status: (referrer && finalRole === "customer") ? "pending_approval" : "approved",
     });
 
     if (bniReferral) {
@@ -105,7 +108,7 @@ class AuthService {
     if (!user) throw new AppError("Invalid email or password", 401);
 
     if (user.isLocked) throw new AppError("Account locked. Try again after 2 hours.", 423);
-    if (user.status === "pending_approval") throw new AppError("Account pending approval. Please wait for directory approval.", 403);
+    if (user.status === "pending_approval" && user.role !== "customer") throw new AppError("Account pending approval. Please wait for directory approval.", 403);
     if (user.status === "rejected") throw new AppError("Account registration rejected.", 403);
     if (!user.isActive) throw new AppError("Account deactivated", 401);
     if (user.isSuspended) throw new AppError("Account suspended: " + user.suspendedReason, 403);

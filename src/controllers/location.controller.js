@@ -116,7 +116,7 @@ exports.getRegions = asyncHandler(async (req, res) => {
   const user = req.user;
   let query = { module: "organization", type: "region" };
 
-  const isGlobal = ["superadmin", "admin"].includes(user?.role);
+  const isGlobal = ["superadmin", "admin", "customer", "user"].includes(user?.role);
   if (!isGlobal) {
     const org = getUserOrg(user);
     if (org.region) {
@@ -138,7 +138,7 @@ exports.getRegions = asyncHandler(async (req, res) => {
 exports.getStates = asyncHandler(async (req, res) => {
   const { regionId } = req.query;
   const user = req.user;
-  const isGlobal = ["superadmin", "admin"].includes(user?.role);
+  const isGlobal = ["superadmin", "admin", "customer", "user"].includes(user?.role);
   const org = getUserOrg(user);
 
   let targetRegionId = regionId;
@@ -177,7 +177,7 @@ exports.getStates = asyncHandler(async (req, res) => {
 exports.getDistricts = asyncHandler(async (req, res) => {
   const { stateId } = req.query;
   const user = req.user;
-  const isGlobal = ["superadmin", "admin"].includes(user?.role);
+  const isGlobal = ["superadmin", "admin", "customer", "user"].includes(user?.role);
   const org = getUserOrg(user);
 
   let targetStateId = stateId;
@@ -227,7 +227,7 @@ exports.getDistricts = asyncHandler(async (req, res) => {
 exports.getChapters = asyncHandler(async (req, res) => {
   const { districtId } = req.query;
   const user = req.user;
-  const isGlobal = ["superadmin", "admin"].includes(user?.role);
+  const isGlobal = ["superadmin", "admin", "customer", "user"].includes(user?.role);
   const org = getUserOrg(user);
 
   let targetDistrictId = districtId;

@@ -15,6 +15,7 @@ const notificationSchema = new mongoose.Schema(
         "system", "announcement",
         "user_created", "membership_registered", "membership_approved",
         "membership_rejected", "meeting_created", "attendance_submitted",
+        "membership_application_new",
       ],
       required: true,
     },

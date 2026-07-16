@@ -22,71 +22,95 @@ class PermissionService {
   async seedPermissions() {
     try {
       const count = await Permission.countDocuments();
-      if (count > 0) return;
+      let allPermCodes = [];
 
-      const permDocs = [];
-      for (const mod of ALL_MODULES) {
-        for (const act of ALL_ACTIONS) {
-          permDocs.push({
-            name: `${mod}.${act}`,
-            code: `${mod}.${act}`,
-            module: mod,
-            page: `${mod}_page`,
-            action: act,
-            description: `Permission to perform ${act} on ${mod}`,
-            category: mod
-          });
+      if (count === 0) {
+        const permDocs = [];
+        for (const mod of ALL_MODULES) {
+          for (const act of ALL_ACTIONS) {
+            permDocs.push({
+              name: `${mod}.${act}`,
+              code: `${mod}.${act}`,
+              module: mod,
+              page: `${mod}_page`,
+              action: act,
+              description: `Permission to perform ${act} on ${mod}`,
+              category: mod
+            });
+          }
         }
+        await Permission.insertMany(permDocs);
+        console.log(`Seeded ${permDocs.length} system permissions.`);
+        allPermCodes = permDocs.map(p => p.code);
+      } else {
+        const existing = await Permission.find().select("code");
+        allPermCodes = existing.map(p => p.code);
       }
 
-      await Permission.insertMany(permDocs);
-      console.log(`Seeded ${permDocs.length} system permissions.`);
+      // Seed/Upsert default RolePermissions
+      const rolePermissionsData = [
+        {
+          role: "superadmin",
+          permissions: allPermCodes
+        },
+        {
+          role: "admin",
+          permissions: allPermCodes.filter(c => !c.includes("login-as"))
+        },
+        {
+          role: "chapter_president",
+          permissions: allPermCodes.filter(c => 
+            c.startsWith("dashboard") || c.startsWith("members") || c.startsWith("meetings") || 
+            c.startsWith("attendance") || c.startsWith("visitors") || c.startsWith("reports") ||
+            c.startsWith("business_wall") || c.startsWith("referrals") || c.startsWith("community")
+          )
+        },
+        {
+          role: "vice_president",
+          permissions: allPermCodes.filter(c => 
+            c.startsWith("dashboard") || c.startsWith("members") || c.startsWith("meetings") || 
+            c.startsWith("attendance") || c.startsWith("visitors") || c.startsWith("reports") ||
+            c.startsWith("business_wall") || c.startsWith("referrals") || c.startsWith("community") ||
+            c.startsWith("announcements")
+          )
+        },
+        {
+          role: "secretary",
+          permissions: allPermCodes.filter(c => 
+            c.startsWith("dashboard") || c.startsWith("members.view") || c.startsWith("meetings") || 
+            c.startsWith("attendance") || c.startsWith("visitors") || c.startsWith("reports")
+          )
+        },
+        {
+          role: "customer",
+          permissions: allPermCodes.filter(c => 
+            c.endsWith(".view") || c.startsWith("dashboard") || c.startsWith("business_wall") || 
+            c.startsWith("referrals") || c.startsWith("one_to_one") || c.startsWith("visitors") ||
+            c.startsWith("calendar") || c.startsWith("chat") || c.startsWith("digital_membership_card")
+          )
+        },
+        ...["region_director", "state_director", "district_director", "executive_director", "launch_director", "direct_consultant"].map(r => ({
+          role: r,
+          permissions: allPermCodes.filter(c => 
+            c.startsWith("dashboard") || c.startsWith("members") || c.startsWith("meetings") || 
+            c.startsWith("attendance") || c.startsWith("visitors") || c.startsWith("reports") ||
+            c.startsWith("business_wall") || c.startsWith("referrals") || c.startsWith("community") ||
+            c.startsWith("announcements") || c.startsWith("vendor") || c.startsWith("products") ||
+            c.startsWith("services") || c.startsWith("payments") || c.startsWith("orders") ||
+            c.startsWith("subscriptions") || c.startsWith("marketplace") || c.startsWith("leads")
+          )
+        }))
+      ];
 
-      // Seed default RolePermissions
-      const allPermCodes = permDocs.map(p => p.code);
-      
-      // Super Admin gets all permissions
-      await RolePermission.create({
-        role: "superadmin",
-        permissions: allPermCodes
-      });
+      for (const rpData of rolePermissionsData) {
+        await RolePermission.findOneAndUpdate(
+          { role: rpData.role },
+          { permissions: rpData.permissions },
+          { upsert: true, new: true }
+        );
+      }
 
-      // Admin gets most permissions
-      await RolePermission.create({
-        role: "admin",
-        permissions: allPermCodes.filter(c => !c.includes("login-as"))
-      });
-
-      // Chapter President permissions
-      await RolePermission.create({
-        role: "chapter_president",
-        permissions: allPermCodes.filter(c => 
-          c.startsWith("dashboard") || c.startsWith("members") || c.startsWith("meetings") || 
-          c.startsWith("attendance") || c.startsWith("visitors") || c.startsWith("reports") ||
-          c.startsWith("business_wall") || c.startsWith("referrals") || c.startsWith("community")
-        )
-      });
-
-      // Secretary permissions
-      await RolePermission.create({
-        role: "secretary",
-        permissions: allPermCodes.filter(c => 
-          c.startsWith("dashboard") || c.startsWith("members.view") || c.startsWith("meetings") || 
-          c.startsWith("attendance") || c.startsWith("visitors") || c.startsWith("reports")
-        )
-      });
-
-      // Customer / Member permissions
-      await RolePermission.create({
-        role: "customer",
-        permissions: allPermCodes.filter(c => 
-          c.endsWith(".view") || c.startsWith("dashboard") || c.startsWith("business_wall") || 
-          c.startsWith("referrals") || c.startsWith("one_to_one") || c.startsWith("visitors") ||
-          c.startsWith("calendar") || c.startsWith("chat") || c.startsWith("digital_membership_card")
-        )
-      });
-
-      console.log("Seeded default role permission maps successfully.");
+      console.log("Seeded/Upserted default role permission maps successfully.");
     } catch (err) {
       console.error("Error seeding permissions:", err.message);
     }

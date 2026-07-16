@@ -20,12 +20,13 @@ const parseApplicationDocuments = uploadDocumentMemoryFields(
 
 router.post(
   "/",
-  optionalAuth,
+  protect,
   parseApplicationDocuments,
   uploadMemoryDocumentsToCloudinary("membership-applications"),
   membershipApplicationController.createApplication
 );
 router.get("/track", membershipApplicationController.trackApplication);
+router.get("/my-application", protect, membershipApplicationController.getMyApplication);
 
 router.use(protect, authorize(...ADMIN_ROLE_VALUES));
 
@@ -35,7 +36,7 @@ router.get("/:id", membershipApplicationController.getApplicationById);
 router.patch(
   "/:id/status",
   [
-    body("status").isIn(["submitted", "documents_verified", "under_review", "approved", "rejected"]).withMessage("Invalid status"),
+    body("status").isIn(["submitted", "documents_verified", "under_review", "approved", "rejected", "changes_requested"]).withMessage("Invalid status"),
     body("adminNotes").optional().isString(),
   ],
   validate,

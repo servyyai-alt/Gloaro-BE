@@ -13,8 +13,8 @@ exports.getMyReferrals = asyncHandler(async (req, res) => {
     Referral.countDocuments({ referrer: req.user._id, type: "signup" }),
   ]);
 
-  const approvedCount = await User.countDocuments({ referredBy: req.user._id, isActive: true });
-  const pendingCount = await User.countDocuments({ referredBy: req.user._id, isActive: false });
+  const approvedCount = await User.countDocuments({ referredBy: req.user._id, status: "approved" });
+  const pendingCount = await User.countDocuments({ referredBy: req.user._id, status: { $ne: "approved" } });
   const wonBusinessRefs = await Referral.find({ referrer: req.user._id, type: "business", status: "won" });
   const businessGenerated = wonBusinessRefs.reduce((sum, r) => sum + (r.businessValue || r.actualValue || 0), 0);
 
