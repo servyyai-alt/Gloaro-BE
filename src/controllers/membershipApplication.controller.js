@@ -10,6 +10,7 @@ const { sendTemplateEmail } = require("../utils/email");
 const { resolveHierarchy, resolveOfficials } = require("../utils/hierarchyHelper");
 const idGenerator = require("../services/idGenerator.service");
 const { runInTransaction } = require("../utils/dbHelper");
+const logger = require("../utils/logger");
 
 const getUserMeta = (user) => {
   if (!user?.meta) return {};
@@ -42,43 +43,60 @@ exports.createApplication = asyncHandler(async (req, res) => {
   const payload = parseData(req.body);
   const files = req.files || {};
 
+  if (!req.user) {
+    throw new AppError("Authentication required to save or submit a membership application.", 401);
+  }
+
   const role = req.user.role;
   const isSuperOrAdmin = ["superadmin", "admin"].includes(role);
+
+  // Check if they already have an application
+  let application = await MembershipApplication.findOne({ submittedBy: req.user._id });
+  
+  if (application && application.status !== "draft") {
+    throw new AppError("You have already submitted a membership application.", 400);
+  }
+
+  const status = payload.status === "draft" ? "draft" : "submitted";
 
   let targetChapterId = payload.chapterId;
   let targetDistrictId = payload.districtId;
   let targetStateId = payload.stateId;
   let targetRegionId = payload.regionId;
 
-  if (!isSuperOrAdmin) {
-    if (role !== "vice_president") {
-      throw new AppError("Only the Chapter Vice President can register new members.", 403);
+  if (status === "submitted" && !isSuperOrAdmin) {
+    if (role !== "vice_president" && role !== "customer") {
+      throw new AppError("Only Chapter Vice Presidents and Applicants can submit membership applications.", 403);
     }
 
-    const meta = getUserMeta(req.user);
-    const profile = meta.adminProfile || {};
-    const org = profile.organization || {};
+    if (role === "vice_president") {
+      const meta = getUserMeta(req.user);
+      const profile = meta.adminProfile || {};
+      const org = profile.organization || {};
 
-    if (!org.chapter) {
-      throw new AppError("Vice President profile must have an assigned Chapter to register members.", 400);
+      if (!org.chapter) {
+        throw new AppError("Vice President profile must have an assigned Chapter to register members.", 400);
+      }
+
+      targetChapterId = org.chapter;
+      targetDistrictId = org.district;
+      targetStateId = org.state;
+      targetRegionId = org.region;
     }
-
-    targetChapterId = org.chapter;
-    targetDistrictId = org.district;
-    targetStateId = org.state;
-    targetRegionId = org.region;
   }
 
-  // 1. Resolve Hierarchy and validate
-  const hierarchy = await resolveHierarchy({
-    regionId: targetRegionId,
-    stateId: targetStateId,
-    districtId: targetDistrictId,
-    chapterId: targetChapterId,
-  });
-
-  // 2. Resolve Officials
-  const officials = await resolveOfficials(hierarchy);
+  // Resolve hierarchy only if chapterId is provided (drafts might not have it yet)
+  let hierarchy = {};
+  let officials = {};
+  if (targetChapterId) {
+    hierarchy = await resolveHierarchy({
+      regionId: targetRegionId,
+      stateId: targetStateId,
+      districtId: targetDistrictId,
+      chapterId: targetChapterId,
+    });
+    officials = await resolveOfficials(hierarchy);
+  }
 
   const documents = {
     profilePhoto: fileFromUpload(files.profilePhoto?.[0], "profilePhoto"),
@@ -92,95 +110,155 @@ exports.createApplication = asyncHandler(async (req, res) => {
     if (!documents[key]) delete documents[key];
   });
 
-  // Create initial workflow step
-  const initialWorkflow = {
-    user: req.user?._id || null,
-    role: req.user?.role || "applicant",
-    action: "submit",
-    remarks: "Membership application submitted",
-    timestamp: new Date(),
-    previousStatus: "draft",
-    newStatus: "submitted",
+  const updatedDocuments = {
+    ...(application?.documents || {}),
+    ...(payload.documents || {}),
+    ...documents
   };
 
-  const application = await MembershipApplication.create({
-    ...payload,
-    applicationNumber: await idGenerator.generateGenericModuleId("membership_application"),
-    documents: { ...(payload.documents || {}), ...documents },
-    submittedBy: req.user?._id,
-    status: "submitted",
+  if (!application) {
+    // Create new application
+    const initialWorkflow = {
+      user: req.user?._id || null,
+      role: req.user?.role || "applicant",
+      action: status === "draft" ? "save_draft" : "submit",
+      remarks: status === "draft" ? "Membership application draft saved" : "Membership application submitted",
+      timestamp: new Date(),
+      previousStatus: "none",
+      newStatus: status,
+    };
 
-    regionId: hierarchy.region._id,
-    stateId: hierarchy.state._id,
-    districtId: hierarchy.district._id,
-    chapterId: hierarchy.chapter._id,
+    application = await MembershipApplication.create({
+      ...payload,
+      applicationNumber: await idGenerator.generateGenericModuleId("membership_application"),
+      documents: updatedDocuments,
+      submittedBy: req.user?._id,
+      status,
 
-    // Set officials
-    ...officials,
+      regionId: hierarchy.region?._id || undefined,
+      stateId: hierarchy.state?._id || undefined,
+      districtId: hierarchy.district?._id || undefined,
+      chapterId: hierarchy.chapter?._id || undefined,
 
-    // Workflow History
-    workflowHistory: [initialWorkflow],
-  });
-
-  // 3. Notify all officials and admins
-  const officialIds = [
-    officials.vicePresidentId,
-    officials.chapterPresidentId,
-    officials.directConsultantId,
-    officials.launchDirectorId,
-    officials.executiveDirectorId,
-    officials.districtDirectorId,
-    officials.stateDirectorId,
-    officials.regionDirectorId,
-  ].filter(Boolean);
-
-  const adminUsers = await User.find({ role: { $in: ["admin", "superadmin"] } }).select("_id email name");
-  const adminIds = adminUsers.map((a) => a._id);
-
-  const recipientIds = [...new Set([...officialIds.map(id => id.toString()), ...adminIds.map(id => id.toString())])];
-
-  if (recipientIds.length > 0) {
-    await Notification.insertMany(
-      recipientIds.map((recId) => ({
-        recipient: recId,
-        type: "membership_application_new",
-        title: "New Membership Application",
-        message: `A new application ${application.applicationNumber} has been submitted for chapter ${hierarchy.chapter.name}.`,
-        link: `/admin/applications/membership/${application._id}`,
-      }))
-    );
-  }
-
-  // Socket notification
-  const { getSocketIO } = require("../sockets");
-  const io = getSocketIO();
-  if (io) {
-    recipientIds.forEach((recId) => {
-      io.to(`user:${recId}`).emit("notification", {
-        title: "New Membership Application",
-        message: `Application ${application.applicationNumber} has been submitted.`,
-        link: `/admin/applications/membership/${application._id}`,
-      });
+      ...officials,
+      workflowHistory: [initialWorkflow],
     });
+  } else {
+    // Update existing draft application
+    const updateWorkflow = {
+      user: req.user?._id || null,
+      role: req.user?.role || "applicant",
+      action: status === "draft" ? "save_draft" : "submit",
+      remarks: status === "draft" ? "Membership application draft updated" : "Membership application submitted",
+      timestamp: new Date(),
+      previousStatus: application.status,
+      newStatus: status,
+    };
+
+    // Update fields
+    application.set({
+      ...payload,
+      documents: updatedDocuments,
+      status,
+      regionId: hierarchy.region?._id || application.regionId,
+      stateId: hierarchy.state?._id || application.stateId,
+      districtId: hierarchy.district?._id || application.districtId,
+      chapterId: hierarchy.chapter?._id || application.chapterId,
+      ...officials,
+    });
+
+    application.workflowHistory.push(updateWorkflow);
+    await application.save();
   }
 
-  // Optional: Send email notifications to officials and admins
-  const officialUsers = await User.find({ _id: { $in: officialIds } }).select("email name");
-  const allNotifyUsers = [...officialUsers, ...adminUsers];
+  // Sync location/chapter to customer user meta so officials can see them in their roster
+  if (status === "submitted" && req.user && req.user.role === "customer" && hierarchy.chapter) {
+    const userMeta = getUserMeta(req.user);
+    req.user.meta = {
+      ...userMeta,
+      adminProfile: {
+        ...(userMeta.adminProfile || {}),
+        organization: {
+          region: hierarchy.region._id.toString(),
+          state: hierarchy.state._id.toString(),
+          district: hierarchy.district._id.toString(),
+          chapter: hierarchy.chapter._id.toString(),
+        }
+      }
+    };
+    await req.user.save({ validateBeforeSave: false });
+  }
 
-  for (const notifyUser of allNotifyUsers) {
-    try {
-      await sendTemplateEmail(
-        notifyUser.email,
-        "membershipApplicationNew",
-        notifyUser.name,
-        application.applicationNumber,
-        hierarchy.chapter.name
+  // 3. Notify officials and admins ONLY if submitting
+  if (status === "submitted" && hierarchy.chapter) {
+    const officialIds = [
+      officials.vicePresidentId,
+      officials.chapterPresidentId,
+      officials.directConsultantId,
+      officials.launchDirectorId,
+      officials.executiveDirectorId,
+      officials.districtDirectorId,
+      officials.stateDirectorId,
+      officials.regionDirectorId,
+    ].filter(Boolean);
+
+    const adminUsers = await User.find({ role: { $in: ["admin", "superadmin"] } }).select("_id email name");
+    const adminIds = adminUsers.map((a) => a._id);
+
+    const recipientIds = [...new Set([...officialIds.map(id => id.toString()), ...adminIds.map(id => id.toString())])];
+
+    if (recipientIds.length > 0) {
+      await Notification.insertMany(
+        recipientIds.map((recId) => ({
+          recipient: recId,
+          type: "membership_application_new",
+          title: "New Membership Application",
+          message: `A new application ${application.applicationNumber} has been submitted for chapter ${hierarchy.chapter.name}.`,
+          link: `/admin/applications/membership/${application._id}`,
+        }))
       );
-    } catch (_) {}
+    }
+
+    // Socket notification
+    const { getSocketIO } = require("../sockets");
+    const io = getSocketIO();
+    if (io) {
+      recipientIds.forEach((recId) => {
+        io.to(`user:${recId}`).emit("notification", {
+          title: "New Membership Application",
+          message: `Application ${application.applicationNumber} has been submitted.`,
+          link: `/admin/applications/membership/${application._id}`,
+        });
+      });
+    }
+
+    // Background email loop
+    (async () => {
+      try {
+        const officialUsers = await User.find({ _id: { $in: officialIds } }).select("email name");
+        const allNotifyUsers = [...officialUsers, ...adminUsers];
+
+        for (const notifyUser of allNotifyUsers) {
+          try {
+            await sendTemplateEmail(
+              notifyUser.email,
+              "membershipApplicationNew",
+              notifyUser.name,
+              application.applicationNumber,
+              hierarchy.chapter.name,
+              `/admin/applications/membership/${application._id}`
+            );
+          } catch (err) {
+            logger.error(`Error sending email to ${notifyUser.email}:`, err);
+          }
+        }
+      } catch (err) {
+        logger.error("Error executing background notification task:", err);
+      }
+    })();
   }
 
-  successResponse(res, 201, "Membership application submitted", application);
+  return successResponse(res, 201, status === "draft" ? "Application draft saved" : "Membership application submitted", application);
 });
 
 exports.getApplications = asyncHandler(async (req, res) => {
@@ -240,7 +318,14 @@ exports.getApplications = asyncHandler(async (req, res) => {
 
   if (req.query.export === "csv") {
     const applications = await MembershipApplication.find(filter)
-      .populate("submittedBy", "name email role memberId")
+      .populate({
+        path: "submittedBy",
+        select: "name email role memberId referredBy",
+        populate: {
+          path: "referredBy",
+          select: "name email referralCode"
+        }
+      })
       .populate("reviewedBy", "name email")
       .populate("vicePresidentId", "name email")
       .populate("regionId", "name code")
@@ -254,6 +339,8 @@ exports.getApplications = asyncHandler(async (req, res) => {
       { label: "Application Number", key: "applicationNumber" },
       { label: "Applicant Name", key: "submittedBy.name" },
       { label: "Applicant Email", key: "submittedBy.email" },
+      { label: "Referred By", key: "submittedBy.referredBy.name" },
+      { label: "Referral Code Used", key: "referralCode" },
       { label: "Status", key: "status" },
       { label: "Region", key: "regionId.name" },
       { label: "State", key: "stateId.name" },
@@ -263,22 +350,113 @@ exports.getApplications = asyncHandler(async (req, res) => {
     ], "membership_applications.csv");
   }
 
-  const [applications, total] = await Promise.all([
-    MembershipApplication.find(filter)
-      .populate("submittedBy", "name email role memberId")
-      .populate("reviewedBy", "name email")
-      .populate("vicePresidentId", "name email")
-      .populate("regionId", "name code")
-      .populate("stateId", "name code")
-      .populate("districtId", "name code")
-      .populate("chapterId", "name code")
-      .sort("-createdAt")
-      .skip(skip)
-      .limit(limit),
-    MembershipApplication.countDocuments(filter),
-  ]);
+  let allApps = await MembershipApplication.find(filter)
+    .populate({
+      path: "submittedBy",
+      select: "name email role memberId referredBy",
+      populate: {
+        path: "referredBy",
+        select: "name email referralCode"
+      }
+    })
+    .populate("reviewedBy", "name email")
+    .populate("vicePresidentId", "name email")
+    .populate("regionId", "name code")
+    .populate("stateId", "name code")
+    .populate("districtId", "name code")
+    .populate("chapterId", "name code")
+    .sort("-createdAt")
+    .lean();
 
-  paginatedResponse(res, applications, page, limit, total, "Membership applications retrieved");
+  if (!req.query.status || req.query.status === "submitted" || req.query.status === "pending_review") {
+    const pendingUsers = await User.find({ role: "customer", status: "pending_approval" })
+      .populate("referredBy")
+      .lean();
+    
+    const getNestedVal = (obj, path) => {
+      return path.split('.').reduce((acc, part) => acc && acc[part], obj);
+    };
+
+    for (const user of pendingUsers) {
+      const hasApp = await MembershipApplication.exists({ submittedBy: user._id });
+      if (hasApp) continue;
+
+      let isVisible = false;
+
+      if (isSuperOrAdmin) {
+        isVisible = true;
+      } else {
+        const userMeta = getUserMeta(user);
+        const referrerMeta = user.referredBy ? getUserMeta(user.referredBy) : {};
+
+        const userChapter = getNestedVal(userMeta, 'adminProfile.organization.chapter') || 
+                            getNestedVal(userMeta, 'memberProfile.organization.chapter') ||
+                            getNestedVal(referrerMeta, 'adminProfile.organization.chapter') ||
+                            getNestedVal(referrerMeta, 'memberProfile.organization.chapter');
+
+        const userDistrict = getNestedVal(userMeta, 'adminProfile.organization.district') || 
+                             getNestedVal(userMeta, 'memberProfile.organization.district') ||
+                             getNestedVal(referrerMeta, 'adminProfile.organization.district') ||
+                             getNestedVal(referrerMeta, 'memberProfile.organization.district');
+
+        const userState = getNestedVal(userMeta, 'adminProfile.organization.state') || 
+                          getNestedVal(userMeta, 'memberProfile.organization.state') ||
+                          getNestedVal(referrerMeta, 'adminProfile.organization.state') ||
+                          getNestedVal(referrerMeta, 'memberProfile.organization.state');
+
+        const userRegion = getNestedVal(userMeta, 'adminProfile.organization.region') || 
+                           getNestedVal(userMeta, 'memberProfile.organization.region') ||
+                           getNestedVal(referrerMeta, 'adminProfile.organization.region') ||
+                           getNestedVal(referrerMeta, 'memberProfile.organization.region');
+
+        const loggedInMeta = getUserMeta(req.user);
+        const loggedInChapter = getNestedVal(loggedInMeta, 'adminProfile.organization.chapter') || getNestedVal(loggedInMeta, 'memberProfile.organization.chapter');
+        const loggedInDistrict = getNestedVal(loggedInMeta, 'adminProfile.organization.district') || getNestedVal(loggedInMeta, 'memberProfile.organization.district');
+        const loggedInState = getNestedVal(loggedInMeta, 'adminProfile.organization.state') || getNestedVal(loggedInMeta, 'memberProfile.organization.state');
+        const loggedInRegion = getNestedVal(loggedInMeta, 'adminProfile.organization.region') || getNestedVal(loggedInMeta, 'memberProfile.organization.region');
+
+        if (role === "region_director") {
+          isVisible = userRegion?.toString() === loggedInRegion?.toString();
+        } else if (role === "state_director") {
+          isVisible = userState?.toString() === loggedInState?.toString();
+        } else if (role === "district_director") {
+          isVisible = userDistrict?.toString() === loggedInDistrict?.toString();
+        } else if (["executive_director", "launch_director", "direct_consultant", "chapter_president", "vice_president"].includes(role)) {
+          isVisible = userChapter?.toString() === loggedInChapter?.toString();
+        }
+      }
+
+      if (isVisible) {
+        allApps.push({
+          _id: user._id,
+          applicationNumber: "N/A",
+          status: "submitted",
+          personal: {
+            fullName: user.name,
+            emailAddress: user.email,
+            mobileNumber: user.phone
+          },
+          submittedBy: {
+            _id: user._id,
+            name: user.name,
+            email: user.email,
+            role: "customer",
+            referredBy: user.referredBy
+          },
+          createdAt: user.createdAt,
+          updatedAt: user.updatedAt,
+          isVirtual: true
+        });
+      }
+    }
+  }
+
+  allApps.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+  const total = allApps.length;
+  const paginatedApps = allApps.slice(skip, skip + limit);
+
+  paginatedResponse(res, paginatedApps, page, limit, total, "Membership applications retrieved");
 });
 
 exports.trackApplication = asyncHandler(async (req, res) => {
@@ -296,15 +474,64 @@ exports.trackApplication = asyncHandler(async (req, res) => {
   successResponse(res, 200, "Application tracking details retrieved", application);
 });
 
-exports.getApplicationById = asyncHandler(async (req, res) => {
-  const application = await MembershipApplication.findById(req.params.id)
+exports.getMyApplication = asyncHandler(async (req, res) => {
+  const application = await MembershipApplication.findOne({ submittedBy: req.user._id })
     .populate("submittedBy", "name email role")
     .populate("reviewedBy", "name email")
     .populate("regionId", "name code")
     .populate("stateId", "name code")
     .populate("districtId", "name code")
     .populate("chapterId", "name code");
-  if (!application) return res.status(404).json({ success: false, message: "Membership application not found" });
+
+  if (!application) {
+    return res.status(200).json({ success: true, data: null, message: "No application found" });
+  }
+  successResponse(res, 200, "Membership application retrieved", application);
+});
+
+
+exports.getApplicationById = asyncHandler(async (req, res) => {
+  let application = await MembershipApplication.findById(req.params.id)
+    .populate({
+      path: "submittedBy",
+      select: "name email role referredBy",
+      populate: {
+        path: "referredBy",
+        select: "name email referralCode"
+      }
+    })
+    .populate("reviewedBy", "name email")
+    .populate("regionId", "name code")
+    .populate("stateId", "name code")
+    .populate("districtId", "name code")
+    .populate("chapterId", "name code");
+  if (!application) {
+    const user = await User.findById(req.params.id).populate("referredBy", "name email referralCode");
+    if (user && user.role === "customer") {
+      application = {
+        _id: user._id,
+        applicationNumber: "N/A",
+        status: "submitted",
+        personal: {
+          fullName: user.name,
+          emailAddress: user.email,
+          mobileNumber: user.phone
+        },
+        submittedBy: {
+          _id: user._id,
+          name: user.name,
+          email: user.email,
+          role: "customer",
+          referredBy: user.referredBy
+        },
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt,
+        isVirtual: true
+      };
+      return successResponse(res, 200, "Membership application retrieved", application);
+    }
+    return res.status(404).json({ success: false, message: "Membership application not found" });
+  }
   successResponse(res, 200, "Membership application retrieved", application);
 });
 
@@ -335,17 +562,37 @@ exports.getApplicationDocumentUrl = asyncHandler(async (req, res) => {
 
 exports.updateApplicationStatus = asyncHandler(async (req, res) => {
   const { status, adminNotes } = req.body;
-  const application = await MembershipApplication.findById(req.params.id);
-  if (!application) return res.status(404).json({ success: false, message: "Membership application not found" });
-
-  const role = req.user.role;
-  if (role === "vice_president") {
-    return res.status(403).json({ success: false, message: "You do not have permission to approve or reject membership applications." });
+  let application = await MembershipApplication.findById(req.params.id);
+  if (!application) {
+    const user = await User.findById(req.params.id);
+    if (user && user.role === "customer") {
+      if (status === "approved") {
+        user.status = "approved";
+        user.isActive = true;
+        await user.save();
+      } else if (status === "rejected") {
+        user.status = "rejected";
+        user.isActive = false;
+        await user.save();
+      } else if (status === "changes_requested") {
+        user.status = "pending_approval";
+        user.isActive = true;
+        await user.save();
+      }
+      return successResponse(res, 200, "User status updated", user);
+    }
+    return res.status(404).json({ success: false, message: "Membership application not found" });
   }
 
+  const role = req.user.role;
   const isSuperAdmin = role === "superadmin";
   const isAdmin = role === "admin";
   const userOrg = getUserMeta(req.user)?.adminProfile?.organization || {};
+
+  const isVicePresident = role === "vice_president" && (
+    application.vicePresidentId?.toString() === req.user._id.toString() ||
+    userOrg.chapter?.toString() === application.chapterId?.toString()
+  );
 
   const isDirectConsultant = role === "direct_consultant" && (
     application.directConsultantId?.toString() === req.user._id.toString() ||
@@ -357,30 +604,10 @@ exports.updateApplicationStatus = asyncHandler(async (req, res) => {
     userOrg.chapter?.toString() === application.chapterId?.toString()
   );
 
-  let isAuthorized = isSuperAdmin || isAdmin || isDirectConsultant || isExecutiveDirector;
-
-  // Check PBAC fallback but restrict it for non-vp
-  if (!isAuthorized) {
-    const meta = getUserMeta(req.user);
-    const profile = meta.adminProfile || {};
-    if (profile.permissions?.members?.canApprove === true) {
-      const officials = [
-        application.directConsultantId?.toString(),
-        application.launchDirectorId?.toString(),
-        application.executiveDirectorId?.toString(),
-        application.districtDirectorId?.toString(),
-        application.stateDirectorId?.toString(),
-        application.regionDirectorId?.toString()
-      ].filter(Boolean);
-
-      if (officials.includes(req.user._id.toString())) {
-        isAuthorized = true;
-      }
-    }
-  }
+  let isAuthorized = isSuperAdmin || isAdmin || isVicePresident;
 
   if (!isAuthorized) {
-    return res.status(403).json({ success: false, message: "Only the assigned Direct Consultant, Executive Director, Admin, or Super Admin can approve or reject this membership application." });
+    return res.status(403).json({ success: false, message: "Only the Chapter Vice President, Admin, or Super Admin can approve or reject this membership application." });
   }
 
   // If status is forwarded, Direct Consultant cannot approve or reject
@@ -389,8 +616,8 @@ exports.updateApplicationStatus = asyncHandler(async (req, res) => {
   }
 
   // Validate action
-  if (!["approved", "rejected", "forwarded"].includes(status)) {
-    return res.status(400).json({ success: false, message: "Invalid action status. Must be approved, rejected, or forwarded." });
+  if (!["approved", "rejected", "forwarded", "changes_requested", "documents_verified", "under_review"].includes(status)) {
+    return res.status(400).json({ success: false, message: "Invalid action status. Must be approved, rejected, forwarded, changes_requested, documents_verified, or under_review." });
   }
 
   if (status === "forwarded") {

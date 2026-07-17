@@ -106,8 +106,8 @@ async function processMembershipApproval(applicationId, status, adminNotes, reqU
     }
 
     // 2. Validate action status
-    if (!["approved", "rejected"].includes(status)) {
-      throw new AppError("Invalid action status. Must be approved or rejected.", 400);
+    if (!["approved", "rejected", "changes_requested", "documents_verified", "under_review"].includes(status)) {
+      throw new AppError("Invalid action status. Must be approved, rejected, changes_requested, documents_verified, or under_review.", 400);
     }
 
     const role = reqUser.role;
@@ -142,6 +142,8 @@ async function processMembershipApproval(applicationId, status, adminNotes, reqU
         application.approvedAt = new Date();
       } else if (status === "rejected") {
         application.rejectionReason = adminNotes || "Requirements not met";
+      } else if (status === "changes_requested") {
+        application.rejectionReason = adminNotes || "Changes requested by reviewer";
       }
 
       // 4. Update the User record
@@ -173,8 +175,11 @@ async function processMembershipApproval(applicationId, status, adminNotes, reqU
               }
             };
           } else if (status === "rejected") {
-            user.isActive = false;
-            user.status = "rejected";
+            user.isActive = true;
+            user.status = "pending_approval";
+          } else if (status === "changes_requested") {
+            user.isActive = true;
+            user.status = "pending_approval";
           }
 
           await user.save({ session, validateBeforeSave: false });
@@ -238,17 +243,23 @@ async function processMembershipApproval(applicationId, status, adminNotes, reqU
       const adminIds = adminUsers.map((a) => a._id.toString());
       const allRecipients = [...new Set([...recipientIds, ...adminIds])];
 
-      const notificationTitle = status === "approved" ? "Membership Approved" : "Membership Rejected";
+      const notificationTitle = status === "approved"
+        ? "Membership Approved"
+        : status === "rejected"
+          ? "Membership Rejected"
+          : "Membership Application Changes Requested";
       const notificationMessage = status === "approved"
         ? `Application ${application.applicationNumber} has been approved. Member ID: ${generatedMemberId}`
-        : `Application ${application.applicationNumber} has been rejected. Reason: ${adminNotes || "Requirements not met"}`;
+        : status === "rejected"
+          ? `Application ${application.applicationNumber} has been rejected. Reason: ${adminNotes || "Requirements not met"}`
+          : `Application ${application.applicationNumber} requires changes. Notes: ${adminNotes || "Please review comments"}`;
 
       const notificationService = require("../services/notification.service");
       
       if (allRecipients.length > 0) {
         await notificationService.sendBulkNotifications({
           recipientIds: allRecipients,
-          type: status === "approved" ? "membership_approved" : "membership_rejected",
+          type: status === "approved" ? "membership_approved" : status === "rejected" ? "membership_rejected" : "membership_changes_requested",
           title: notificationTitle,
           message: notificationMessage,
           link: `/admin/applications/membership/${application._id}`
@@ -289,6 +300,16 @@ async function processMembershipApproval(applicationId, status, adminNotes, reqU
               link: "/membership-application",
               emailTemplate: "membershipApplicationRejected",
               emailParams: [applicantUser.name, application.applicationNumber, adminNotes || "Requirements not met"]
+            });
+          } else if (status === "changes_requested") {
+            await notificationService.sendNotification({
+              recipientId: applicantUser._id,
+              type: "membership_rejected",
+              title: "Membership Application Status Update: Changes Requested",
+              message: `Reviewer requested changes to your application. Comments: ${adminNotes || "Please review comments"}`,
+              link: "/membership-application",
+              emailTemplate: "membershipApplicationRejected",
+              emailParams: [applicantUser.name, application.applicationNumber, adminNotes || "Please review comments"]
             });
           }
         }

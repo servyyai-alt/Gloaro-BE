@@ -16,7 +16,7 @@ const membershipApplicationSchema = new mongoose.Schema(
   {
     applicationNumber: { type: String, unique: true, sparse: true, immutable: true, trim: true, uppercase: true, index: true },
     step: { type: Number, default: 3 },
-    status: { type: String, enum: ["draft", "submitted", "pending_review", "documents_verified", "under_review", "forwarded", "approved", "rejected"], default: "submitted" },
+    status: { type: String, enum: ["draft", "submitted", "pending_review", "documents_verified", "under_review", "forwarded", "approved", "rejected", "changes_requested"], default: "submitted" },
     agreement: {
       declarationsAccepted: [String],
       legalName: String,
@@ -67,6 +67,7 @@ const membershipApplicationSchema = new mongoose.Schema(
         emailAddress: String,
       },
     ],
+    referralCode: String,
     documents: {
       profilePhoto: fileSchema,
       registrationCertificate: fileSchema,
