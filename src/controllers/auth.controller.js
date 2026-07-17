@@ -4,6 +4,7 @@ const { setTokenCookies, clearTokenCookies } = require("../utils/jwt");
 const { successResponse } = require("../utils/response");
 const { populateUserOrganizationLocations } = require("../utils/userPopulateHelper");
 const AuditLog = require("../models/AuditLog");
+const MembershipApplication = require("../models/MembershipApplication");
 
 /**
  * @swagger
@@ -31,8 +32,12 @@ exports.register = asyncHandler(async (req, res) => {
     userAgent: req.get("User-Agent")
   });
 
+  const userObj = sanitizeUser(populated[0]);
+  userObj.onboardingStatus = "Draft";
+  userObj.onboardingComments = "";
+
   successResponse(res, 201, result.message, {
-    user: sanitizeUser(populated[0]),
+    user: userObj,
   });
 });
 
@@ -60,8 +65,21 @@ exports.login = asyncHandler(async (req, res) => {
     userAgent: req.get("User-Agent")
   });
 
+  const userObj = sanitizeUser(populated[0]);
+  const app = await MembershipApplication.findOne({ submittedBy: result.user._id });
+  let onboardingStatus = "Draft";
+  if (app) {
+    if (app.status === "draft") onboardingStatus = "Draft";
+    else if (app.status === "approved") onboardingStatus = "Approved";
+    else if (app.status === "rejected") onboardingStatus = "Rejected";
+    else if (app.status === "changes_requested") onboardingStatus = "ChangesRequested";
+    else onboardingStatus = "Pending";
+  }
+  userObj.onboardingStatus = onboardingStatus;
+  userObj.onboardingComments = app ? (app.adminNotes || app.rejectionReason || "") : "";
+
   successResponse(res, 200, "Login successful", {
-    user: sanitizeUser(populated[0]),
+    user: userObj,
     accessToken: result.accessToken,
     refreshToken: result.refreshToken,
   });
@@ -174,7 +192,20 @@ exports.verifyOTP = asyncHandler(async (req, res) => {
 // @GET /api/v1/auth/me
 exports.getMe = asyncHandler(async (req, res) => {
   const populated = await populateUserOrganizationLocations([req.user]);
-  successResponse(res, 200, "Profile retrieved", { user: sanitizeUser(populated[0]) });
+  const userObj = sanitizeUser(populated[0]);
+  const app = await MembershipApplication.findOne({ submittedBy: req.user._id });
+  let onboardingStatus = "Draft";
+  if (app) {
+    if (app.status === "draft") onboardingStatus = "Draft";
+    else if (app.status === "approved") onboardingStatus = "Approved";
+    else if (app.status === "rejected") onboardingStatus = "Rejected";
+    else if (app.status === "changes_requested") onboardingStatus = "ChangesRequested";
+    else onboardingStatus = "Pending";
+  }
+  userObj.onboardingStatus = onboardingStatus;
+  userObj.onboardingComments = app ? (app.adminNotes || app.rejectionReason || "") : "";
+
+  successResponse(res, 200, "Profile retrieved", { user: userObj });
 });
 
 // @GET /api/v1/auth/validate-referral/:code

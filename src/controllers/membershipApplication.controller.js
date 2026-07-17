@@ -350,29 +350,113 @@ exports.getApplications = asyncHandler(async (req, res) => {
     ], "membership_applications.csv");
   }
 
-  const [applications, total] = await Promise.all([
-    MembershipApplication.find(filter)
-      .populate({
-        path: "submittedBy",
-        select: "name email role memberId referredBy",
-        populate: {
-          path: "referredBy",
-          select: "name email referralCode"
-        }
-      })
-      .populate("reviewedBy", "name email")
-      .populate("vicePresidentId", "name email")
-      .populate("regionId", "name code")
-      .populate("stateId", "name code")
-      .populate("districtId", "name code")
-      .populate("chapterId", "name code")
-      .sort("-createdAt")
-      .skip(skip)
-      .limit(limit),
-    MembershipApplication.countDocuments(filter),
-  ]);
+  let allApps = await MembershipApplication.find(filter)
+    .populate({
+      path: "submittedBy",
+      select: "name email role memberId referredBy",
+      populate: {
+        path: "referredBy",
+        select: "name email referralCode"
+      }
+    })
+    .populate("reviewedBy", "name email")
+    .populate("vicePresidentId", "name email")
+    .populate("regionId", "name code")
+    .populate("stateId", "name code")
+    .populate("districtId", "name code")
+    .populate("chapterId", "name code")
+    .sort("-createdAt")
+    .lean();
 
-  paginatedResponse(res, applications, page, limit, total, "Membership applications retrieved");
+  if (!req.query.status || req.query.status === "submitted" || req.query.status === "pending_review") {
+    const pendingUsers = await User.find({ role: "customer", status: "pending_approval" })
+      .populate("referredBy")
+      .lean();
+    
+    const getNestedVal = (obj, path) => {
+      return path.split('.').reduce((acc, part) => acc && acc[part], obj);
+    };
+
+    for (const user of pendingUsers) {
+      const hasApp = await MembershipApplication.exists({ submittedBy: user._id });
+      if (hasApp) continue;
+
+      let isVisible = false;
+
+      if (isSuperOrAdmin) {
+        isVisible = true;
+      } else {
+        const userMeta = getUserMeta(user);
+        const referrerMeta = user.referredBy ? getUserMeta(user.referredBy) : {};
+
+        const userChapter = getNestedVal(userMeta, 'adminProfile.organization.chapter') || 
+                            getNestedVal(userMeta, 'memberProfile.organization.chapter') ||
+                            getNestedVal(referrerMeta, 'adminProfile.organization.chapter') ||
+                            getNestedVal(referrerMeta, 'memberProfile.organization.chapter');
+
+        const userDistrict = getNestedVal(userMeta, 'adminProfile.organization.district') || 
+                             getNestedVal(userMeta, 'memberProfile.organization.district') ||
+                             getNestedVal(referrerMeta, 'adminProfile.organization.district') ||
+                             getNestedVal(referrerMeta, 'memberProfile.organization.district');
+
+        const userState = getNestedVal(userMeta, 'adminProfile.organization.state') || 
+                          getNestedVal(userMeta, 'memberProfile.organization.state') ||
+                          getNestedVal(referrerMeta, 'adminProfile.organization.state') ||
+                          getNestedVal(referrerMeta, 'memberProfile.organization.state');
+
+        const userRegion = getNestedVal(userMeta, 'adminProfile.organization.region') || 
+                           getNestedVal(userMeta, 'memberProfile.organization.region') ||
+                           getNestedVal(referrerMeta, 'adminProfile.organization.region') ||
+                           getNestedVal(referrerMeta, 'memberProfile.organization.region');
+
+        const loggedInMeta = getUserMeta(req.user);
+        const loggedInChapter = getNestedVal(loggedInMeta, 'adminProfile.organization.chapter') || getNestedVal(loggedInMeta, 'memberProfile.organization.chapter');
+        const loggedInDistrict = getNestedVal(loggedInMeta, 'adminProfile.organization.district') || getNestedVal(loggedInMeta, 'memberProfile.organization.district');
+        const loggedInState = getNestedVal(loggedInMeta, 'adminProfile.organization.state') || getNestedVal(loggedInMeta, 'memberProfile.organization.state');
+        const loggedInRegion = getNestedVal(loggedInMeta, 'adminProfile.organization.region') || getNestedVal(loggedInMeta, 'memberProfile.organization.region');
+
+        if (role === "region_director") {
+          isVisible = userRegion?.toString() === loggedInRegion?.toString();
+        } else if (role === "state_director") {
+          isVisible = userState?.toString() === loggedInState?.toString();
+        } else if (role === "district_director") {
+          isVisible = userDistrict?.toString() === loggedInDistrict?.toString();
+        } else if (["executive_director", "launch_director", "direct_consultant", "chapter_president", "vice_president"].includes(role)) {
+          isVisible = userChapter?.toString() === loggedInChapter?.toString();
+        }
+      }
+
+      if (isVisible) {
+        allApps.push({
+          _id: user._id,
+          applicationNumber: "N/A",
+          status: "submitted",
+          personal: {
+            fullName: user.name,
+            emailAddress: user.email,
+            mobileNumber: user.phone
+          },
+          submittedBy: {
+            _id: user._id,
+            name: user.name,
+            email: user.email,
+            role: "customer",
+            referredBy: user.referredBy
+          },
+          createdAt: user.createdAt,
+          updatedAt: user.updatedAt,
+          isVirtual: true
+        });
+      }
+    }
+  }
+
+  allApps.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+  const total = allApps.length;
+  const paginatedApps = allApps.slice(skip, skip + limit);
+
+  paginatedResponse(res, paginatedApps, page, limit, total, "Membership applications retrieved");
 });
 
 exports.trackApplication = asyncHandler(async (req, res) => {
@@ -407,7 +491,7 @@ exports.getMyApplication = asyncHandler(async (req, res) => {
 
 
 exports.getApplicationById = asyncHandler(async (req, res) => {
-  const application = await MembershipApplication.findById(req.params.id)
+  let application = await MembershipApplication.findById(req.params.id)
     .populate({
       path: "submittedBy",
       select: "name email role referredBy",
@@ -421,7 +505,33 @@ exports.getApplicationById = asyncHandler(async (req, res) => {
     .populate("stateId", "name code")
     .populate("districtId", "name code")
     .populate("chapterId", "name code");
-  if (!application) return res.status(404).json({ success: false, message: "Membership application not found" });
+  if (!application) {
+    const user = await User.findById(req.params.id).populate("referredBy", "name email referralCode");
+    if (user && user.role === "customer") {
+      application = {
+        _id: user._id,
+        applicationNumber: "N/A",
+        status: "submitted",
+        personal: {
+          fullName: user.name,
+          emailAddress: user.email,
+          mobileNumber: user.phone
+        },
+        submittedBy: {
+          _id: user._id,
+          name: user.name,
+          email: user.email,
+          role: "customer",
+          referredBy: user.referredBy
+        },
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt,
+        isVirtual: true
+      };
+      return successResponse(res, 200, "Membership application retrieved", application);
+    }
+    return res.status(404).json({ success: false, message: "Membership application not found" });
+  }
   successResponse(res, 200, "Membership application retrieved", application);
 });
 
@@ -452,8 +562,27 @@ exports.getApplicationDocumentUrl = asyncHandler(async (req, res) => {
 
 exports.updateApplicationStatus = asyncHandler(async (req, res) => {
   const { status, adminNotes } = req.body;
-  const application = await MembershipApplication.findById(req.params.id);
-  if (!application) return res.status(404).json({ success: false, message: "Membership application not found" });
+  let application = await MembershipApplication.findById(req.params.id);
+  if (!application) {
+    const user = await User.findById(req.params.id);
+    if (user && user.role === "customer") {
+      if (status === "approved") {
+        user.status = "approved";
+        user.isActive = true;
+        await user.save();
+      } else if (status === "rejected") {
+        user.status = "rejected";
+        user.isActive = false;
+        await user.save();
+      } else if (status === "changes_requested") {
+        user.status = "pending_approval";
+        user.isActive = true;
+        await user.save();
+      }
+      return successResponse(res, 200, "User status updated", user);
+    }
+    return res.status(404).json({ success: false, message: "Membership application not found" });
+  }
 
   const role = req.user.role;
   const isSuperAdmin = role === "superadmin";

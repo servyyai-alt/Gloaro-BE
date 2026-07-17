@@ -220,6 +220,65 @@ const emailTemplates = {
         </a>
       </div>`,
   }),
+  customerOnboardingSubmitted: (name, email) => ({
+    subject: `New Customer Onboarding Application - ${name}`,
+    html: `
+      <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px">
+        <h2 style="color:#2563eb">New Customer Onboarding Application Submitted</h2>
+        <p>A new customer application has been submitted by <strong>${name}</strong> (${email}).</p>
+        <p>Please log in to the admin portal to review this application.</p>
+        <a href="${process.env.CLIENT_URL}/admin/customer-onboarding"
+           style="display:inline-block;background:#2563eb;color:white;padding:12px 24px;border-radius:6px;text-decoration:none;margin:16px 0">
+          Review Application
+        </a>
+      </div>`,
+  }),
+  customerOnboardingApproved: (name) => ({
+    subject: "Your Account has been Approved! - Gloaro Portal",
+    html: `
+      <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px">
+        <h2 style="color:#16a34a">Congratulations! Your Application is Approved</h2>
+        <p>Hi ${name},</p>
+        <p>We are pleased to inform you that your customer onboarding application has been approved.</p>
+        <p>You now have full access to all features on the Gloaro Portal.</p>
+        <a href="${process.env.CLIENT_URL}/"
+           style="display:inline-block;background:#16a34a;color:white;padding:12px 24px;border-radius:6px;text-decoration:none;margin:16px 0">
+          Go to Portal
+        </a>
+      </div>`,
+  }),
+  customerOnboardingRejected: (name, reason) => ({
+    subject: "Customer Application Status Update - Rejected",
+    html: `
+      <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px">
+        <h2 style="color:#dc2626">Application Rejected</h2>
+        <p>Hi ${name},</p>
+        <p>We regret to inform you that your customer onboarding application has been rejected.</p>
+        <p><strong>Reason for rejection:</strong></p>
+        <p style="background:#fef2f2;border-left:4px solid #ef4444;padding:12px;margin:12px 0;font-style:italic;color:#991b1b">${reason}</p>
+        <p>You can edit and resubmit your registration form by logging back into your account.</p>
+        <a href="${process.env.CLIENT_URL}/customer/onboarding"
+           style="display:inline-block;background:#dc2626;color:white;padding:12px 24px;border-radius:6px;text-decoration:none;margin:16px 0">
+          Edit & Resubmit
+        </a>
+      </div>`,
+  }),
+  customerOnboardingChangesRequested: (name, comments) => ({
+    subject: "Customer Application Status Update - Changes Requested",
+    html: `
+      <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px">
+        <h2 style="color:#eab308">Changes Requested for Your Application</h2>
+        <p>Hi ${name},</p>
+        <p>Our review team has requested some changes to your customer onboarding application.</p>
+        <p><strong>Reviewer Comments:</strong></p>
+        <p style="background:#fef9c3;border-left:4px solid #eab308;padding:12px;margin:12px 0;font-style:italic;color:#854d0e">${comments}</p>
+        <p>Please update your form details and resubmit for approval.</p>
+        <a href="${process.env.CLIENT_URL}/customer/onboarding"
+           style="display:inline-block;background:#eab308;color:white;padding:12px 24px;border-radius:6px;text-decoration:none;margin:16px 0">
+          Update & Resubmit
+        </a>
+      </div>`,
+  }),
 };
 
 const sendTemplateEmail = async (to, template, ...args) => {

@@ -48,7 +48,7 @@ class AuthService {
       role: finalRole,
       referredBy: referrer?._id,
       referralCode: await idGenerator.generateMemberReferralCode(),
-      status: (referrer && finalRole === "customer") ? "pending_approval" : "approved",
+      status: (finalRole === "customer") ? "pending_approval" : "approved",
     });
 
     if (bniReferral) {
@@ -109,7 +109,7 @@ class AuthService {
 
     if (user.isLocked) throw new AppError("Account locked. Try again after 2 hours.", 423);
     if (user.status === "pending_approval" && user.role !== "customer") throw new AppError("Account pending approval. Please wait for directory approval.", 403);
-    if (user.status === "rejected") throw new AppError("Account registration rejected.", 403);
+    if (user.status === "rejected" && user.role !== "customer") throw new AppError("Account registration rejected.", 403);
     if (!user.isActive) throw new AppError("Account deactivated", 401);
     if (user.isSuspended) throw new AppError("Account suspended: " + user.suspendedReason, 403);
     if (user.isBlocked) throw new AppError("Account blocked: " + user.blockedReason, 403);
