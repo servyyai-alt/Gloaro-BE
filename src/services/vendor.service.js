@@ -95,29 +95,39 @@ class VendorService {
     if (search) filter.$text = { $search: search };
 
     if (caller && !["superadmin", "admin"].includes(caller.role)) {
+      const mongoose = require("mongoose");
       const meta = getUserMeta(caller);
       const org = meta.adminProfile?.organization || {};
-      const userFilter = {};
-      let hasOrg = false;
+      
+      if (caller.role === "region_director" && org.region) {
+        filter.regionId = new mongoose.Types.ObjectId(org.region);
+      } else if (caller.role === "state_director" && org.state) {
+        filter.stateId = new mongoose.Types.ObjectId(org.state);
+      } else if (caller.role === "district_director" && org.district) {
+        filter.districtId = new mongoose.Types.ObjectId(org.district);
+      } else {
+        const userFilter = {};
+        let hasOrg = false;
 
-      if (org.chapter) {
-        userFilter["meta.adminProfile.organization.chapter"] = org.chapter.toString();
-        hasOrg = true;
-      } else if (org.district) {
-        userFilter["meta.adminProfile.organization.district"] = org.district.toString();
-        hasOrg = true;
-      } else if (org.state) {
-        userFilter["meta.adminProfile.organization.state"] = org.state.toString();
-        hasOrg = true;
-      } else if (org.region) {
-        userFilter["meta.adminProfile.organization.region"] = org.region.toString();
-        hasOrg = true;
-      }
+        if (org.chapter) {
+          userFilter["meta.adminProfile.organization.chapter"] = org.chapter.toString();
+          hasOrg = true;
+        } else if (org.district) {
+          userFilter["meta.adminProfile.organization.district"] = org.district.toString();
+          hasOrg = true;
+        } else if (org.state) {
+          userFilter["meta.adminProfile.organization.state"] = org.state.toString();
+          hasOrg = true;
+        } else if (org.region) {
+          userFilter["meta.adminProfile.organization.region"] = org.region.toString();
+          hasOrg = true;
+        }
 
-      if (hasOrg) {
-        const scopedUsers = await User.find(userFilter).select("_id");
-        const userIds = scopedUsers.map((u) => u._id);
-        filter.user = { $in: userIds };
+        if (hasOrg) {
+          const scopedUsers = await User.find(userFilter).select("_id");
+          const userIds = scopedUsers.map((u) => u._id);
+          filter.user = { $in: userIds };
+        }
       }
     }
 

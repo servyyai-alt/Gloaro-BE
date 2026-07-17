@@ -70,7 +70,7 @@ exports.getServices = asyncHandler(async (req, res) => {
 
   const [services, total] = await Promise.all([
     Service.find(filter)
-      .populate({ path: "vendor", select: "businessName ownerName slug logo", populate: { path: "user", select: "name" } })
+      .populate({ path: "vendor", select: "businessName ownerName phone email slug logo", populate: { path: "user", select: "name" } })
       .populate("category", "name slug")
       .sort(req.query.sortBy || "-createdAt")
       .skip(skip).limit(limit),
@@ -81,7 +81,7 @@ exports.getServices = asyncHandler(async (req, res) => {
 
 exports.getServiceById = asyncHandler(async (req, res) => {
   const service = await Service.findById(req.params.id)
-    .populate({ path: "vendor", select: "businessName ownerName slug logo address", populate: { path: "user", select: "name" } })
+    .populate({ path: "vendor", select: "businessName ownerName phone email slug logo address", populate: { path: "user", select: "name" } })
     .populate("category", "name");
   if (!service) throw new AppError("Service not found", 404);
   await Service.findByIdAndUpdate(req.params.id, { $inc: { "stats.views": 1 } });
