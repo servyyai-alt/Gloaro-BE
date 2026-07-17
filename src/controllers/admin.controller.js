@@ -1166,7 +1166,7 @@ exports.createAdminAccount = asyncHandler(async (req, res) => {
       "meta.adminProfile.organization.chapter": childOrg.chapter?.toString()
     });
     if (existingPresident) {
-      throw new AppError("Only one Chapter President is allowed per Chapter.", 400);
+      throw new AppError("A President already exists for this Chapter. Delete the existing President before creating another.", 409);
     }
   }
 
@@ -1207,6 +1207,16 @@ exports.createAdminAccount = asyncHandler(async (req, res) => {
     });
     if (existing) {
       throw new AppError("Only one District Director is allowed per District.", 400);
+    }
+  }
+
+  if (role === "direct_consultant") {
+    const existing = await User.findOne({
+      role: "direct_consultant",
+      "meta.adminProfile.organization.chapter": childOrg.chapter?.toString()
+    });
+    if (existing) {
+      throw new AppError("A Direct Consultant already exists for this Chapter. Delete the existing Direct Consultant before creating another.", 409);
     }
   }
 
