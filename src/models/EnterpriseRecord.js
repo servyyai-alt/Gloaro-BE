@@ -49,6 +49,7 @@ const enterpriseRecordSchema = new mongoose.Schema(
         "member_journey",
         "ai_insight",
         "document",
+        "secretary_category",
       ],
     },
     type: { type: String, trim: true, index: true },

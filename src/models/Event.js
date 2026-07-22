@@ -35,11 +35,18 @@ const eventSchema = new mongoose.Schema(
     attendees: [
       {
         user: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+        name: String,
         registeredAt: { type: Date, default: Date.now },
         status: { type: String, enum: ["registered", "attended", "cancelled", "no_show"], default: "registered" },
         payment: { type: mongoose.Schema.Types.ObjectId, ref: "Payment" },
         ticketNumber: String,
         guestCount: { type: Number, default: 0 },
+        role: String,
+        task: String,
+        phone: String,
+        assignedDate: Date,
+        attendanceDate: Date,
+        attendanceNote: String,
       },
     ],
     stats: {
