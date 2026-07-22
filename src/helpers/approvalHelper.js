@@ -110,7 +110,7 @@ async function processMembershipApproval(applicationId, status, adminNotes, reqU
       throw new AppError("Invalid action status. Must be approved, rejected, changes_requested, documents_verified, or under_review.", 400);
     }
 
-    const role = reqUser.role;
+    const role = String(reqUser.role || "").trim().toLowerCase().replace(/\s+/g, "_");
     const previousStatus = application.status;
     let generatedMemberId = "";
 
@@ -349,7 +349,7 @@ async function processLegacyMembershipApproval(userId, status, adminNotes, reqUs
       throw new AppError("Invalid action status. Must be approved or rejected.", 400);
     }
 
-    const role = reqUser.role;
+    const role = String(reqUser.role || "").trim().toLowerCase().replace(/\s+/g, "_");
     const previousStatus = user.status || "pending_approval";
     let generatedMemberId = "";
 

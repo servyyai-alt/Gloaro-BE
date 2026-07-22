@@ -72,6 +72,33 @@ const getUserMeta = (user) => {
   return user.meta;
 };
 
+const resolveOrganizationLocationIds = async (org = {}) => {
+  const filters = {};
+  const isValidId = (val) => mongoose.Types.ObjectId.isValid(val);
+  const findLocation = async (type, value) => {
+    if (!value) return null;
+    return EnterpriseRecord.findOne({
+      module: "organization",
+      type,
+      $or: [isValidId(value) ? { _id: value } : null, { code: value }, { name: value }].filter(Boolean),
+    }).select("_id").lean();
+  };
+
+  const region = await findLocation("region", org.region);
+  if (region?._id) filters.regionId = region._id;
+
+  const state = await findLocation("state", org.state);
+  if (state?._id) filters.stateId = state._id;
+
+  const district = await findLocation("district", org.district);
+  if (district?._id) filters.districtId = district._id;
+
+  const chapter = await findLocation("chapter", org.chapter);
+  if (chapter?._id) filters.chapterId = chapter._id;
+
+  return filters;
+};
+
 const buildAdminProfile = (body = {}) => ({
   organization: body.organization || {},
   modules: body.modules || [],
@@ -1560,6 +1587,55 @@ exports.getAdminActivity = asyncHandler(async (req, res) => {
 
 exports.getApprovedMembers = asyncHandler(async (req, res) => {
   const { page, limit, skip } = getPagination(req.query);
+  const role = String(req.user?.role || "").trim().toLowerCase().replace(/\s+/g, "_");
+  const isGlobal = ["superadmin", "admin"].includes(role);
+  const scopeFields = {};
+
+  if (!isGlobal) {
+    const meta = getUserMeta(req.user);
+    const org = meta.adminProfile?.organization || {};
+    const locationIds = await resolveOrganizationLocationIds(org);
+    const scopedRoles = new Set([
+      "region_director",
+      "state_director",
+      "district_director",
+      "executive_director",
+      "launch_director",
+      "direct_consultant",
+      "chapter_president",
+      "vice_president",
+      "secretary",
+    ]);
+
+    const setScopedField = (field, scopeId) => {
+      if (!scopeId) {
+        scopeFields.__empty = true;
+        return false;
+      }
+      if (req.query[field] && String(req.query[field]) !== String(scopeId)) {
+        scopeFields.__empty = true;
+        return false;
+      }
+      scopeFields[field] = scopeId;
+      return true;
+    };
+
+    if (!scopedRoles.has(role)) {
+      scopeFields.__empty = true;
+    } else if (role === "region_director") {
+      setScopedField("regionId", locationIds.regionId);
+    } else if (role === "state_director") {
+      setScopedField("stateId", locationIds.stateId);
+    } else if (role === "district_director") {
+      setScopedField("districtId", locationIds.districtId);
+    } else if (["executive_director", "launch_director", "direct_consultant", "chapter_president", "vice_president", "secretary"].includes(role)) {
+      setScopedField("chapterId", locationIds.chapterId);
+    }
+  }
+
+  if (scopeFields.__empty) {
+    return paginatedResponse(res, [], page, limit, 0, "Approved members list retrieved");
+  }
 
   // Initial match for approved customers
   const matchUser = {
@@ -1603,11 +1679,21 @@ exports.getApprovedMembers = asyncHandler(async (req, res) => {
     },
     { $unwind: { path: "$approver", preserveNullAndEmptyArrays: true } },
 
+    // Add effective location IDs for online and offline members
+    {
+      $addFields: {
+        effectiveRegionId: { $ifNull: ["$application.regionId", "$meta.adminProfile.organization.region", "$meta.memberProfile.organization.region"] },
+        effectiveStateId: { $ifNull: ["$application.stateId", "$meta.adminProfile.organization.state", "$meta.memberProfile.organization.state"] },
+        effectiveDistrictId: { $ifNull: ["$application.districtId", "$meta.adminProfile.organization.district", "$meta.memberProfile.organization.district"] },
+        effectiveChapterId: { $ifNull: ["$application.chapterId", "$meta.adminProfile.organization.chapter", "$meta.memberProfile.organization.chapter"] }
+      }
+    },
+
     // Lookup Enterprise Records for Location Names
     {
       $lookup: {
         from: "enterpriserecords",
-        localField: "application.regionId",
+        localField: "effectiveRegionId",
         foreignField: "_id",
         as: "region"
       }
@@ -1617,7 +1703,7 @@ exports.getApprovedMembers = asyncHandler(async (req, res) => {
     {
       $lookup: {
         from: "enterpriserecords",
-        localField: "application.stateId",
+        localField: "effectiveStateId",
         foreignField: "_id",
         as: "state"
       }
@@ -1627,7 +1713,7 @@ exports.getApprovedMembers = asyncHandler(async (req, res) => {
     {
       $lookup: {
         from: "enterpriserecords",
-        localField: "application.districtId",
+        localField: "effectiveDistrictId",
         foreignField: "_id",
         as: "district"
       }
@@ -1637,7 +1723,7 @@ exports.getApprovedMembers = asyncHandler(async (req, res) => {
     {
       $lookup: {
         from: "enterpriserecords",
-        localField: "application.chapterId",
+        localField: "effectiveChapterId",
         foreignField: "_id",
         as: "chapter"
       }
@@ -1667,7 +1753,7 @@ exports.getApprovedMembers = asyncHandler(async (req, res) => {
         chapterId: "$chapter._id",
         approvedBy: { $ifNull: ["$approver.name", "$approver.email"] },
         approvedById: "$approver._id",
-        approvedRole: { $ifNull: ["$application.approvedRole", "admin"] },
+        approvedRole: { $ifNull: ["$application.approvedRole", { $ifNull: ["$approver.role", "admin"] }] },
         approvedAt: { $ifNull: ["$application.approvedAt", "$createdAt"] },
         createdAt: 1
       }
@@ -1681,6 +1767,12 @@ exports.getApprovedMembers = asyncHandler(async (req, res) => {
   if (req.query.district) matchFilter.districtId = new mongoose.Types.ObjectId(req.query.district);
   if (req.query.chapter) matchFilter.chapterId = new mongoose.Types.ObjectId(req.query.chapter);
   if (req.query.plan) matchFilter.membershipPlan = req.query.plan;
+
+  Object.entries(scopeFields).forEach(([field, value]) => {
+    if (field !== "__empty" && value) {
+      matchFilter[field] = value;
+    }
+  });
   
   if (req.query.status) {
     if (req.query.status === "active") {

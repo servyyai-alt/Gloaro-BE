@@ -27,6 +27,11 @@ const parseData = (body) => {
   return JSON.parse(body.data);
 };
 
+const normalizeReviewerRole = (role = "") => {
+  const normalized = String(role || "").trim().toLowerCase().replace(/\s+/g, "_");
+  return normalized;
+};
+
 const fileFromUpload = (file, field) => {
   if (!file) return undefined;
   return {
@@ -584,7 +589,7 @@ exports.updateApplicationStatus = asyncHandler(async (req, res) => {
     return res.status(404).json({ success: false, message: "Membership application not found" });
   }
 
-  const role = req.user.role;
+  const role = normalizeReviewerRole(req.user.role);
   const isSuperAdmin = role === "superadmin";
   const isAdmin = role === "admin";
   const userOrg = getUserMeta(req.user)?.adminProfile?.organization || {};
@@ -604,10 +609,11 @@ exports.updateApplicationStatus = asyncHandler(async (req, res) => {
     userOrg.chapter?.toString() === application.chapterId?.toString()
   );
 
-  let isAuthorized = isSuperAdmin || isAdmin || isVicePresident;
+  const isChapterReviewer = isVicePresident || isExecutiveDirector;
+  let isAuthorized = isSuperAdmin || isAdmin || isChapterReviewer;
 
   if (!isAuthorized) {
-    return res.status(403).json({ success: false, message: "Only the Chapter Vice President, Admin, or Super Admin can approve or reject this membership application." });
+    return res.status(403).json({ success: false, message: "Only an authorized chapter reviewer, Admin, or Super Admin can approve or reject this membership application." });
   }
 
   // If status is forwarded, Direct Consultant cannot approve or reject
