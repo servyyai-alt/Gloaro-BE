@@ -105,14 +105,19 @@ class VendorService {
         filter.stateId = new mongoose.Types.ObjectId(org.state);
       } else if (caller.role === "district_director" && org.district) {
         filter.districtId = new mongoose.Types.ObjectId(org.district);
+      } else if (org.chapter) {
+        const userFilter = { "meta.adminProfile.organization.chapter": org.chapter.toString() };
+        const scopedUsers = await User.find(userFilter).select("_id");
+        const userIds = scopedUsers.map((u) => u._id);
+        filter.$or = [
+          { chapterId: new mongoose.Types.ObjectId(org.chapter) },
+          { user: { $in: userIds } }
+        ];
       } else {
         const userFilter = {};
         let hasOrg = false;
 
-        if (org.chapter) {
-          userFilter["meta.adminProfile.organization.chapter"] = org.chapter.toString();
-          hasOrg = true;
-        } else if (org.district) {
+        if (org.district) {
           userFilter["meta.adminProfile.organization.district"] = org.district.toString();
           hasOrg = true;
         } else if (org.state) {

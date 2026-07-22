@@ -263,6 +263,8 @@ class VendorApplicationService {
         .populate("stateId", "name code")
         .populate("districtId", "name code")
         .populate("chapterId", "name code")
+        .populate("reviewedBy", "name email role")
+        .populate("workflowHistory.user", "name email role")
         .sort("-createdAt")
         .skip(skip)
         .limit(limit),
@@ -280,7 +282,8 @@ class VendorApplicationService {
       .populate("stateId", "name code")
       .populate("districtId", "name code")
       .populate("chapterId", "name code")
-      .populate("reviewedBy", "name");
+      .populate("reviewedBy", "name email role")
+      .populate("workflowHistory.user", "name email role");
 
     if (!app) throw new AppError("Vendor application not found", 404);
 
