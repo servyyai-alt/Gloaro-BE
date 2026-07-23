@@ -12,9 +12,31 @@ const getUserMeta = (user) => {
   return user.meta;
 };
 
+const getSecretaryEventScope = async (user) => {
+  const organization = getUserMeta(user).adminProfile?.organization || {};
+  const ids = [organization.region, organization.state, organization.district, organization.chapter].filter(Boolean);
+  const records = ids.length ? await EnterpriseRecord.find({ _id: { $in: ids } }).select("_id name code type").lean() : [];
+  const byId = new Map(records.map((record) => [String(record._id), record]));
+  const location = (value) => byId.get(String(value)) || (value ? { name: String(value), code: String(value) } : null);
+  const region = location(organization.region);
+  const state = location(organization.state);
+  const district = location(organization.district);
+  const chapter = location(organization.chapter);
+  return {
+    scope: chapter ? "chapter" : district ? "district" : state ? "state" : region ? "region" : "national",
+    region: region?.name,
+    regionCode: region?.code,
+    state: state?.name,
+    stateCode: state?.code,
+    district: district?.name,
+    districtCode: district?.code,
+    chapterCode: chapter?.code || chapter?.name,
+  };
+};
+
 class SecretaryService {
   async getSecretaryEvents(user, { page, limit, skip, search }) { const filter = { organizer: user._id }; if (search) filter.title = new RegExp(search, "i"); const [items, total] = await Promise.all([Event.find(filter).populate("attendees.user", "name email phone avatar").sort("-startDate").skip(skip).limit(limit).lean(), Event.countDocuments(filter)]); return { items, total }; }
-  async createSecretaryEvent(user, body) { return Event.create({ title: body.name || body.title, description: body.description || "", shortDescription: body.description || "", startDate: body.date, endDate: body.endDate || body.date, status: "published", organizer: user._id, type: body.type || "offline" }); }
+  async createSecretaryEvent(user, body) { const scope = await getSecretaryEventScope(user); return Event.create({ title: body.name || body.title, description: body.description || "", shortDescription: body.description || "", startDate: body.date, endDate: body.endDate || body.date, status: "published", organizer: user._id, type: body.type || "offline", ...scope }); }
   async updateEventMembers(user, id, body) { const event = await Event.findOne({ _id: id, organizer: user._id }); if (!event) return null; const member = { user: body.user || undefined, name: body.name, role: body.role, task: body.task, phone: body.phone, assignedDate: body.assignedDate || event.startDate, status: body.status || "registered", attendanceDate: body.attendanceDate, attendanceNote: body.attendanceNote }; const index = body.user ? event.attendees.findIndex((item) => String(item.user) === String(body.user)) : -1; if (index >= 0) event.attendees[index] = { ...event.attendees[index].toObject(), ...member }; else event.attendees.push(member); event.stats.totalRegistrations = event.attendees.length; await event.save(); return Event.findById(id).populate("attendees.user", "name email phone avatar"); }
   async updateEventAttendance(user, id, attendeeId, body) { const event = await Event.findOne({ _id: id, organizer: user._id }); if (!event) return null; const attendee = event.attendees.id(attendeeId); if (!attendee) return null; attendee.status = body.status; attendee.attendanceDate = body.attendanceDate || new Date(); attendee.attendanceNote = body.attendanceNote || ""; await event.save(); return attendee; }
   chapterFilter(user) { const chapter = getUserMeta(user).adminProfile?.organization?.chapter; return chapter ? { chapter } : {}; }

@@ -1,4 +1,5 @@
 const Event = require("../models/Event");
+const EnterpriseRecord = require("../models/EnterpriseRecord");
 const { AppError, asyncHandler } = require("../middleware/errorHandler");
 const { successResponse, paginatedResponse, getPagination } = require("../utils/response");
 const { isAdminRole } = require("../constants/adminRoles");
@@ -39,12 +40,31 @@ exports.getEvents = asyncHandler(async (req, res) => {
 
 exports.getEventById = asyncHandler(async (req, res) => {
   const event = await Event.findById(req.params.id)
-    .populate("organizer", "name email")
+    .populate("organizer", "name email meta")
     .populate("category", "name")
     .populate("attendees.user", "name email avatar");
   if (!event) throw new AppError("Event not found", 404);
+  const eventData = event.toObject({ flattenMaps: true });
+  const organization = eventData.organizer?.meta?.adminProfile?.organization || {};
+  const locationIds = [organization.region, organization.state, organization.district, organization.chapter].filter(Boolean);
+  if (locationIds.length) {
+    const locations = await EnterpriseRecord.find({ _id: { $in: locationIds } }).select("_id name code").lean();
+    const byId = new Map(locations.map((location) => [String(location._id), location]));
+    const resolve = (value) => byId.get(String(value)) || (value ? { name: value, code: value } : null);
+    const region = resolve(eventData.region || organization.region);
+    const state = resolve(eventData.state || organization.state);
+    const district = resolve(eventData.district || organization.district);
+    eventData.region = region?.name;
+    eventData.regionCode = eventData.regionCode || region?.code;
+    eventData.state = state?.name;
+    eventData.stateCode = eventData.stateCode || state?.code;
+    eventData.district = district?.name;
+    eventData.districtCode = eventData.districtCode || district?.code;
+    eventData.chapterCode = eventData.chapterCode || resolve(organization.chapter)?.code;
+    delete eventData.organizer?.meta;
+  }
   await Event.findByIdAndUpdate(req.params.id, { $inc: { "stats.totalViews": 1 } });
-  successResponse(res, 200, "Event retrieved", event);
+  successResponse(res, 200, "Event retrieved", eventData);
 });
 
 exports.updateEvent = asyncHandler(async (req, res) => {
