@@ -1,3 +1,4 @@
+const { ROLES } = require("../constants/roleConfig");
 const Notification = require("../models/Notification");
 const Vendor = require("../models/Vendor");
 const { AppError, asyncHandler } = require("../middleware/errorHandler");
@@ -49,7 +50,7 @@ exports.sendBroadcast = asyncHandler(async (req, res) => {
   if (userIds?.length) {
     recipients = userIds;
   } else if (role) {
-    const roleFilter = role === "customer" || role === "user" ? { role: { $in: ["customer", "user"] } } : { role };
+    const roleFilter = role === ROLES.CUSTOMER || role === "user" ? { role: { $in: [ROLES.CUSTOMER, "user"] } } : { role };
     const users = await User.find(roleFilter).select("_id");
     recipients = users.map((u) => u._id);
   } else {

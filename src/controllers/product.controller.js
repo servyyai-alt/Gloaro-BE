@@ -1,3 +1,4 @@
+const { ROLES } = require("../constants/roleConfig");
 const Product = require("../models/Product");
 const Vendor = require("../models/Vendor");
 const { AppError, asyncHandler } = require("../middleware/errorHandler");
@@ -75,7 +76,7 @@ exports.getProducts = asyncHandler(async (req, res) => {
 
   const [products, total] = await Promise.all([
     Product.find(filter)
-      .populate({ path: "vendor", select: "businessName ownerName phone email slug logo", populate: { path: "user", select: "name" } })
+      .populate({ path: ROLES.VENDOR, select: "businessName ownerName phone email slug logo", populate: { path: "user", select: "name" } })
       .populate("category", "name slug")
       .sort(sort).skip(skip).limit(limit),
     Product.countDocuments(filter),
@@ -85,7 +86,7 @@ exports.getProducts = asyncHandler(async (req, res) => {
 
 exports.getProductById = asyncHandler(async (req, res) => {
   const product = await Product.findById(req.params.id)
-    .populate({ path: "vendor", select: "businessName ownerName phone email slug logo address stats", populate: { path: "user", select: "name" } })
+    .populate({ path: ROLES.VENDOR, select: "businessName ownerName phone email slug logo address stats", populate: { path: "user", select: "name" } })
     .populate("category", "name");
   if (!product) throw new AppError("Product not found", 404);
   await Product.findByIdAndUpdate(req.params.id, { $inc: { "stats.views": 1 } });
@@ -93,7 +94,7 @@ exports.getProductById = asyncHandler(async (req, res) => {
 });
 
 exports.updateProduct = asyncHandler(async (req, res) => {
-  const product = await Product.findById(req.params.id).populate("vendor");
+  const product = await Product.findById(req.params.id).populate(ROLES.VENDOR);
   if (!product) throw new AppError("Product not found", 404);
   const isOwner = product.vendor.user.toString() === req.user._id.toString();
   if (!isOwner && !isAdminRole(req.user.role)) throw new AppError("Not authorized", 403);
@@ -125,7 +126,7 @@ exports.approveProduct = asyncHandler(async (req, res) => {
 });
 
 exports.deleteProduct = asyncHandler(async (req, res) => {
-  const product = await Product.findById(req.params.id).populate("vendor");
+  const product = await Product.findById(req.params.id).populate(ROLES.VENDOR);
   if (!product) throw new AppError("Product not found", 404);
   const isOwner = product.vendor.user.toString() === req.user._id.toString();
   if (!isOwner && !isAdminRole(req.user.role)) throw new AppError("Not authorized", 403);

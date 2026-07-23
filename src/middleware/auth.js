@@ -1,3 +1,4 @@
+const { ROLES } = require("../constants/roleConfig");
 const { verifyAccessToken } = require("../utils/jwt");
 const User = require("../models/User");
 const { AppError, asyncHandler } = require("./errorHandler");
@@ -25,9 +26,9 @@ const protect = asyncHandler(async (req, res, next) => {
 
   req.user = user;
 
-  // Dynamically set effective role to "vendor" in memory if approved
-  if (user.role === "customer" && user.vendorProfile?.status === "approved") {
-    user.role = "vendor";
+  // Dynamically set effective role to ROLES.VENDOR in memory if approved
+  if (user.role === ROLES.CUSTOMER && user.vendorProfile?.status === "approved") {
+    user.role = ROLES.VENDOR;
   }
 
   next();
@@ -35,9 +36,9 @@ const protect = asyncHandler(async (req, res, next) => {
 
 const roleMatches = (allowedRole, actualRole) => {
   if (allowedRole === actualRole) return true;
-  if (allowedRole === "admin" && isAdminRole(actualRole)) return true;
-  if (allowedRole === "customer" && actualRole === "user") return true;
-  if (allowedRole === "user" && actualRole === "customer") return true;
+  if (allowedRole === ROLES.ADMIN && isAdminRole(actualRole)) return true;
+  if (allowedRole === ROLES.CUSTOMER && actualRole === "user") return true;
+  if (allowedRole === "user" && actualRole === ROLES.CUSTOMER) return true;
   return false;
 };
 
@@ -48,7 +49,7 @@ const inferModuleFromPath = (path) => {
   if (p.startsWith("/admin/super-config") || p.startsWith("/admin/settings") || p.startsWith("/admin/system")) return "settings";
   if (p.startsWith("/admin/audit-logs")) return "reports";
   if (p.startsWith("/admin/enterprise/search")) return "settings";
-  if (p.includes("vendor")) return "vendors";
+  if (p.includes(ROLES.VENDOR)) return "vendors";
   if (p.includes("marketplace") || p.includes("products") || p.includes("services") || p.includes("banners")) return "marketplace";
   if (p.includes("membership") || p.includes("users") || p.includes("plans")) return "members";
   if (p.includes("visitor")) return "visitors";
@@ -82,7 +83,7 @@ const getMeta = (user) => {
 
 const authorize = (...roles) => async (req, res, next) => {
   try {
-    if (req.user.role === "superadmin") return next();
+    if (req.user.role === ROLES.SUPERADMIN) return next();
 
     // Infer permission code
     const moduleName = inferModuleFromPath(req.originalUrl || req.baseUrl + req.path);

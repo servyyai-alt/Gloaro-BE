@@ -1,3 +1,4 @@
+const { ROLES } = require("../constants/roleConfig");
 const express = require("express");
 const router = express.Router();
 const locationController = require("../controllers/location.controller");
@@ -10,9 +11,9 @@ router.get("/districts", protect, locationController.getDistricts);
 router.get("/chapters", protect, locationController.getChapters);
 
 // Restricted to Admins & Super Admins and local Directors
-router.get("/locations", protect, authorize("superadmin", "admin", "region_director", "state_director", "district_director"), locationController.getLocations);
-router.post("/location", protect, authorize("superadmin", "admin", "region_director", "state_director", "district_director"), locationController.createLocation);
-router.put("/location/:id", protect, authorize("superadmin", "admin", "region_director", "state_director", "district_director"), locationController.updateLocation);
-router.delete("/location/:id", protect, authorize("superadmin", "admin", "region_director", "state_director", "district_director"), locationController.deleteLocation);
+router.get("/locations", protect, authorize(ROLES.SUPERADMIN, ROLES.ADMIN, ROLES.REGION_DIRECTOR, ROLES.STATE_DIRECTOR, ROLES.DISTRICT_DIRECTOR), locationController.getLocations);
+router.post("/location", protect, authorize(ROLES.SUPERADMIN, ROLES.ADMIN, ROLES.REGION_DIRECTOR, ROLES.STATE_DIRECTOR, ROLES.DISTRICT_DIRECTOR), locationController.createLocation);
+router.put("/location/:id", protect, authorize(ROLES.SUPERADMIN, ROLES.ADMIN, ROLES.REGION_DIRECTOR, ROLES.STATE_DIRECTOR, ROLES.DISTRICT_DIRECTOR), locationController.updateLocation);
+router.delete("/location/:id", protect, authorize(ROLES.SUPERADMIN, ROLES.ADMIN, ROLES.REGION_DIRECTOR, ROLES.STATE_DIRECTOR, ROLES.DISTRICT_DIRECTOR), locationController.deleteLocation);
 
 module.exports = router;

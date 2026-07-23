@@ -1,3 +1,4 @@
+const { ROLES } = require("../constants/roleConfig");
 const express = require("express");
 const router = express.Router();
 const membershipController = require("../controllers/membership.controller");
@@ -111,7 +112,7 @@ router.get("/my/history", membershipController.getMembershipHistory);
  */
 router.patch("/my/cancel", membershipController.cancelMembership);
 
-router.use(authorize("admin", "superadmin"));
+router.use(authorize(ROLES.ADMIN, ROLES.SUPERADMIN));
 
 /**
  * @swagger

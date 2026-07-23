@@ -1,3 +1,4 @@
+const { ROLES } = require("../constants/roleConfig");
 const { Server } = require("socket.io");
 const { verifyAccessToken } = require("../utils/jwt");
 const User = require("../models/User");
@@ -41,7 +42,7 @@ const initSocket = (server) => {
     socket.join(`user:${socket.user._id}`);
 
     // Join vendor room
-    if (socket.user.role === "vendor") {
+    if (socket.user.role === ROLES.VENDOR) {
       socket.emit("request_vendor_id", {});
     }
 

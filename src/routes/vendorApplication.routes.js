@@ -40,7 +40,7 @@ router.get("/:id/documents/:field/url", vendorApplicationController.getApplicati
 router.patch(
   "/:id/status",
   [
-    body("status").isIn(["submitted", "under_review", "approved", "rejected"]).withMessage("Invalid status"),
+    body("status").isIn(["pending_vp_review", "rejected_by_vp", "submitted", "under_review", "approved", "rejected"]).withMessage("Invalid status"),
     body("adminNotes").optional().isString().trim(),
   ],
   validate,

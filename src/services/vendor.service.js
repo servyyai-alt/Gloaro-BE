@@ -1,3 +1,4 @@
+const { ROLES } = require("../constants/roleConfig");
 const Vendor = require("../models/Vendor");
 const User = require("../models/User");
 const Notification = require("../models/Notification");
@@ -94,16 +95,16 @@ class VendorService {
     if (plan) filter["membership.plan"] = plan;
     if (search) filter.$text = { $search: search };
 
-    if (caller && !["superadmin", "admin"].includes(caller.role)) {
+    if (caller && ![ROLES.SUPERADMIN, ROLES.ADMIN].includes(caller.role)) {
       const mongoose = require("mongoose");
       const meta = getUserMeta(caller);
       const org = meta.adminProfile?.organization || {};
       
-      if (caller.role === "region_director" && org.region) {
+      if (caller.role === ROLES.REGION_DIRECTOR && org.region) {
         filter.regionId = new mongoose.Types.ObjectId(org.region);
-      } else if (caller.role === "state_director" && org.state) {
+      } else if (caller.role === ROLES.STATE_DIRECTOR && org.state) {
         filter.stateId = new mongoose.Types.ObjectId(org.state);
-      } else if (caller.role === "district_director" && org.district) {
+      } else if (caller.role === ROLES.DISTRICT_DIRECTOR && org.district) {
         filter.districtId = new mongoose.Types.ObjectId(org.district);
       } else if (org.chapter) {
         const userFilter = { "meta.adminProfile.organization.chapter": org.chapter.toString() };

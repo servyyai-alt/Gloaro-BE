@@ -1,3 +1,4 @@
+const { ROLES } = require("../constants/roleConfig");
 const Service = require("../models/Service");
 const Vendor = require("../models/Vendor");
 const { AppError, asyncHandler } = require("../middleware/errorHandler");
@@ -70,7 +71,7 @@ exports.getServices = asyncHandler(async (req, res) => {
 
   const [services, total] = await Promise.all([
     Service.find(filter)
-      .populate({ path: "vendor", select: "businessName ownerName phone email slug logo", populate: { path: "user", select: "name" } })
+      .populate({ path: ROLES.VENDOR, select: "businessName ownerName phone email slug logo", populate: { path: "user", select: "name" } })
       .populate("category", "name slug")
       .sort(req.query.sortBy || "-createdAt")
       .skip(skip).limit(limit),
@@ -81,7 +82,7 @@ exports.getServices = asyncHandler(async (req, res) => {
 
 exports.getServiceById = asyncHandler(async (req, res) => {
   const service = await Service.findById(req.params.id)
-    .populate({ path: "vendor", select: "businessName ownerName phone email slug logo address", populate: { path: "user", select: "name" } })
+    .populate({ path: ROLES.VENDOR, select: "businessName ownerName phone email slug logo address", populate: { path: "user", select: "name" } })
     .populate("category", "name");
   if (!service) throw new AppError("Service not found", 404);
   await Service.findByIdAndUpdate(req.params.id, { $inc: { "stats.views": 1 } });
@@ -89,7 +90,7 @@ exports.getServiceById = asyncHandler(async (req, res) => {
 });
 
 exports.updateService = asyncHandler(async (req, res) => {
-  const service = await Service.findById(req.params.id).populate("vendor");
+  const service = await Service.findById(req.params.id).populate(ROLES.VENDOR);
   if (!service) throw new AppError("Service not found", 404);
   const isOwner = service.vendor.user.toString() === req.user._id.toString();
   if (!isOwner && !isAdminRole(req.user.role)) throw new AppError("Not authorized", 403);
@@ -121,7 +122,7 @@ exports.approveService = asyncHandler(async (req, res) => {
 });
 
 exports.deleteService = asyncHandler(async (req, res) => {
-  const service = await Service.findById(req.params.id).populate("vendor");
+  const service = await Service.findById(req.params.id).populate(ROLES.VENDOR);
   if (!service) throw new AppError("Service not found", 404);
   const isOwner = service.vendor.user.toString() === req.user._id.toString();
   if (!isOwner && !isAdminRole(req.user.role)) throw new AppError("Not authorized", 403);

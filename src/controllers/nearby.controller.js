@@ -1,3 +1,4 @@
+const { ROLES } = require("../constants/roleConfig");
 const mongoose = require("mongoose");
 const Vendor = require("../models/Vendor");
 const Product = require("../models/Product");
@@ -135,7 +136,7 @@ exports.getNearbyServices = asyncHandler(async (req, res) => {
   if (params.maxPrice !== undefined) filter["pricing.minPrice"] = { ...filter["pricing.minPrice"], $lte: params.maxPrice };
 
   const services = await Service.find(filter)
-    .populate("vendor", "businessName slug logo phone website address location operatingHours stats")
+    .populate(ROLES.VENDOR, "businessName slug logo phone website address location operatingHours stats")
     .populate("category", "name slug")
     .limit(params.limit)
     .lean();
@@ -158,7 +159,7 @@ exports.getNearbyProducts = asyncHandler(async (req, res) => {
   if (params.maxPrice !== undefined) filter["pricing.sellingPrice"] = { ...filter["pricing.sellingPrice"], $lte: params.maxPrice };
 
   const products = await Product.find(filter)
-    .populate("vendor", "businessName slug logo phone website address location operatingHours stats")
+    .populate(ROLES.VENDOR, "businessName slug logo phone website address location operatingHours stats")
     .populate("category", "name slug")
     .limit(params.limit)
     .lean();

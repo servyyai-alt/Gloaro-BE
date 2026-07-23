@@ -1,3 +1,4 @@
+const { ROLES } = require("../constants/roleConfig");
 const EnterpriseRecord = require("../models/EnterpriseRecord");
 const { AppError, asyncHandler } = require("../middleware/errorHandler");
 const AuditLog = require("../models/AuditLog");
@@ -18,7 +19,7 @@ const getUserOrg = (user) => {
 
 // Utility to fetch all allowed location IDs for a user based on role hierarchy
 async function getAllowedLocationIds(user) {
-  const isGlobal = ["superadmin", "admin"].includes(user?.role);
+  const isGlobal = [ROLES.SUPERADMIN, ROLES.ADMIN].includes(user?.role);
   if (isGlobal) {
     return null; // Null means no filtering (allow all)
   }
@@ -26,7 +27,7 @@ async function getAllowedLocationIds(user) {
   const org = getUserOrg(user);
   const allowedIds = [];
 
-  if (user.role === "region_director") {
+  if (user.role === ROLES.REGION_DIRECTOR) {
     if (!org.region) return [];
     allowedIds.push(org.region);
     
@@ -47,7 +48,7 @@ async function getAllowedLocationIds(user) {
         allowedIds.push(...chapters.map(c => c._id));
       }
     }
-  } else if (user.role === "state_director") {
+  } else if (user.role === ROLES.STATE_DIRECTOR) {
     if (!org.state) return [];
     allowedIds.push(org.state);
 
@@ -61,7 +62,7 @@ async function getAllowedLocationIds(user) {
       const chapters = await EnterpriseRecord.find({ module: "organization", type: "chapter", parent: { $in: districtIds } }).select("_id").lean();
       allowedIds.push(...chapters.map(c => c._id));
     }
-  } else if (user.role === "district_director") {
+  } else if (user.role === ROLES.DISTRICT_DIRECTOR) {
     if (!org.district) return [];
     allowedIds.push(org.district);
 
@@ -116,7 +117,7 @@ exports.getRegions = asyncHandler(async (req, res) => {
   const user = req.user;
   let query = { module: "organization", type: "region" };
 
-  const isGlobal = ["superadmin", "admin", "customer", "user"].includes(user?.role);
+  const isGlobal = [ROLES.SUPERADMIN, ROLES.ADMIN, ROLES.CUSTOMER, "user"].includes(user?.role);
   if (!isGlobal) {
     const org = getUserOrg(user);
     if (org.region) {
@@ -138,7 +139,7 @@ exports.getRegions = asyncHandler(async (req, res) => {
 exports.getStates = asyncHandler(async (req, res) => {
   const { regionId } = req.query;
   const user = req.user;
-  const isGlobal = ["superadmin", "admin", "customer", "user"].includes(user?.role);
+  const isGlobal = [ROLES.SUPERADMIN, ROLES.ADMIN, ROLES.CUSTOMER, "user"].includes(user?.role);
   const org = getUserOrg(user);
 
   let targetRegionId = regionId;
@@ -161,7 +162,7 @@ exports.getStates = asyncHandler(async (req, res) => {
   };
 
   // If State Director or below, further restrict states to only their assigned state
-  if (!isGlobal && user.role !== "region_director" && org.state) {
+  if (!isGlobal && user.role !== ROLES.REGION_DIRECTOR && org.state) {
     query._id = org.state;
   }
 
@@ -177,14 +178,14 @@ exports.getStates = asyncHandler(async (req, res) => {
 exports.getDistricts = asyncHandler(async (req, res) => {
   const { stateId } = req.query;
   const user = req.user;
-  const isGlobal = ["superadmin", "admin", "customer", "user"].includes(user?.role);
+  const isGlobal = [ROLES.SUPERADMIN, ROLES.ADMIN, ROLES.CUSTOMER, "user"].includes(user?.role);
   const org = getUserOrg(user);
 
   let targetStateId = stateId;
   if (!isGlobal) {
     if (!org.state) {
       // Region director can query districts under their region's states
-      if (user.role === "region_director" && org.region) {
+      if (user.role === ROLES.REGION_DIRECTOR && org.region) {
         // Enforce stateId belongs to their region
         const states = await EnterpriseRecord.find({ module: "organization", type: "state", parent: org.region }).select("_id").lean();
         const stateIds = states.map(s => s._id.toString());
@@ -211,7 +212,7 @@ exports.getDistricts = asyncHandler(async (req, res) => {
   };
 
   // If District Director or below, restrict to their assigned district
-  if (!isGlobal && !["region_director", "state_director"].includes(user.role) && org.district) {
+  if (!isGlobal && ![ROLES.REGION_DIRECTOR, ROLES.STATE_DIRECTOR].includes(user.role) && org.district) {
     query._id = org.district;
   }
 
@@ -227,13 +228,13 @@ exports.getDistricts = asyncHandler(async (req, res) => {
 exports.getChapters = asyncHandler(async (req, res) => {
   const { districtId } = req.query;
   const user = req.user;
-  const isGlobal = ["superadmin", "admin", "customer", "user"].includes(user?.role);
+  const isGlobal = [ROLES.SUPERADMIN, ROLES.ADMIN, ROLES.CUSTOMER, "user"].includes(user?.role);
   const org = getUserOrg(user);
 
   let targetDistrictId = districtId;
   if (!isGlobal) {
     if (!org.district) {
-      if (user.role === "region_director" && org.region) {
+      if (user.role === ROLES.REGION_DIRECTOR && org.region) {
         // Find states, then districts
         const states = await EnterpriseRecord.find({ module: "organization", type: "state", parent: org.region }).select("_id").lean();
         const districts = await EnterpriseRecord.find({ module: "organization", type: "district", parent: { $in: states.map(s => s._id) } }).select("_id").lean();
@@ -241,7 +242,7 @@ exports.getChapters = asyncHandler(async (req, res) => {
         if (!districtIds.includes(districtId)) {
           return res.status(200).json({ success: true, data: { chapters: [] } });
         }
-      } else if (user.role === "state_director" && org.state) {
+      } else if (user.role === ROLES.STATE_DIRECTOR && org.state) {
         const districts = await EnterpriseRecord.find({ module: "organization", type: "district", parent: org.state }).select("_id").lean();
         const districtIds = districts.map(d => d._id.toString());
         if (!districtIds.includes(districtId)) {
@@ -266,7 +267,7 @@ exports.getChapters = asyncHandler(async (req, res) => {
   };
 
   // If Executive Director or below, restrict to their assigned chapter
-  if (!isGlobal && !["region_director", "state_director", "district_director"].includes(user.role) && org.chapter) {
+  if (!isGlobal && ![ROLES.REGION_DIRECTOR, ROLES.STATE_DIRECTOR, ROLES.DISTRICT_DIRECTOR].includes(user.role) && org.chapter) {
     query._id = org.chapter;
   }
 
@@ -297,24 +298,24 @@ exports.createLocation = asyncHandler(async (req, res) => {
   }
 
   // Role jurisdiction checks
-  const isGlobal = ["superadmin", "admin"].includes(user?.role);
+  const isGlobal = [ROLES.SUPERADMIN, ROLES.ADMIN].includes(user?.role);
   if (!isGlobal) {
     const org = getUserOrg(user);
-    if (user.role === "region_director") {
+    if (user.role === ROLES.REGION_DIRECTOR) {
       if (type !== "state") {
         throw new AppError("Region Directors are only allowed to create States", 403);
       }
       if (parent?.toString() !== org.region?.toString()) {
         throw new AppError("Cannot create a State outside your assigned Region", 403);
       }
-    } else if (user.role === "state_director") {
+    } else if (user.role === ROLES.STATE_DIRECTOR) {
       if (type !== "district") {
         throw new AppError("State Directors are only allowed to create Districts", 403);
       }
       if (parent?.toString() !== org.state?.toString()) {
         throw new AppError("Cannot create a District outside your assigned State", 403);
       }
-    } else if (user.role === "district_director") {
+    } else if (user.role === ROLES.DISTRICT_DIRECTOR) {
       if (type !== "chapter") {
         throw new AppError("District Directors are only allowed to create Chapters", 403);
       }

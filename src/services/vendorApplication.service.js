@@ -1,3 +1,4 @@
+const { ROLES } = require("../constants/roleConfig");
 const VendorApplication = require("../models/VendorApplication");
 const Vendor = require("../models/Vendor");
 const User = require("../models/User");
@@ -28,6 +29,9 @@ const fileFromUpload = (file, field) => {
     resourceType: file.resourceType,
   };
 };
+
+const HIDDEN_FROM_EXISTING_WORKFLOW_STATUSES = ["pending_vp_review", "rejected_by_vp"];
+const VP_REVIEW_STATUSES = ["pending_vp_review", "rejected_by_vp"];
 
 class VendorApplicationService {
   async getMyApplication(userId) {
@@ -154,13 +158,13 @@ class VendorApplicationService {
       app.applicationNumber = await idGenerator.generateGenericModuleId("vendor_management");
     }
 
-    app.status = "submitted";
+    app.status = "pending_vp_review";
     
     const initialWorkflow = {
       user: userId,
       role: "applicant",
       action: "submitted",
-      remarks: "Vendor application submitted for review",
+      remarks: "Vendor application submitted for VP review",
       timestamp: new Date(),
     };
     app.workflowHistory.push(initialWorkflow);
@@ -171,29 +175,22 @@ class VendorApplicationService {
       "vendorProfile.status": "pending"
     });
 
-    // Notify officials & admins
-    const admins = await User.find({ role: { $in: ["admin", "superadmin"] } }).select("_id");
-    const adminIds = admins.map((a) => a._id.toString());
+    // Notify the assigned Vice President only. Once forwarded, the existing approval flow takes over.
+    const vpRecipients = app.chapterId
+      ? await User.find({
+          role: ROLES.VICE_PRESIDENT,
+          "meta.adminProfile.organization.chapter": app.chapterId,
+        }).select("_id")
+      : [];
+    const vpIds = vpRecipients.map((vp) => vp._id.toString());
 
-    // Scoping: Find the Chapter Director (executive_director) matching the application's chapterId
-    let chapterDirectorIds = [];
-    if (app.chapterId) {
-      const directors = await User.find({
-        role: "executive_director",
-        "meta.adminProfile.organization.district": app.districtId ? app.districtId.toString() : null,
-      }).select("_id");
-      chapterDirectorIds = directors.map((d) => d._id.toString());
-    }
-
-    const allRecipients = [...new Set([...adminIds, ...chapterDirectorIds])];
-
-    if (allRecipients.length > 0) {
+    if (vpIds.length > 0) {
       await notificationService.sendBulkNotifications({
-        recipientIds: allRecipients,
+        recipientIds: vpIds,
         type: "system",
         title: "New Vendor Application",
-        message: `A new vendor application ${app.applicationNumber} has been submitted for chapter review.`,
-        link: `/admin/applications/vendor`, // Reused path prefix
+        message: `A new vendor application ${app.applicationNumber} has been submitted for VP review.`,
+        link: `/vice-president/vendor-applications`,
       });
     }
 
@@ -213,7 +210,6 @@ class VendorApplicationService {
 
   async getApplications(user, query) {
     const filter = {};
-    if (query.status) filter.status = query.status;
     if (query.search) {
       filter.$or = [
         { "step2.details.businessName": new RegExp(query.search, "i") },
@@ -230,25 +226,43 @@ class VendorApplicationService {
 
     // Jurisdictional matching
     const role = user.role;
-    const isGlobal = ["superadmin", "admin"].includes(role);
-    if (!isGlobal) {
+    const isGlobal = [ROLES.SUPERADMIN, ROLES.ADMIN].includes(role);
+    const isVicePresident = role === ROLES.VICE_PRESIDENT;
+
+    if (isVicePresident) {
+      filter.status = VP_REVIEW_STATUSES.includes(query.status) ? query.status : "pending_vp_review";
+    } else if (query.status) {
+      if (HIDDEN_FROM_EXISTING_WORKFLOW_STATUSES.includes(query.status)) {
+        filter._id = new mongoose.Types.ObjectId();
+      } else {
+        filter.status = query.status;
+      }
+    } else {
+      filter.status = { $nin: HIDDEN_FROM_EXISTING_WORKFLOW_STATUSES };
+    }
+
+    if (!isGlobal && !isVicePresident) {
       const meta = getUserMeta(user);
       const org = meta.adminProfile?.organization || {};
 
-      if (role === "executive_director") {
+      if (role === ROLES.EXECUTIVE_DIRECTOR) {
         filter.chapterId = org.chapter || new mongoose.Types.ObjectId();
-      } else if (role === "region_director") {
+      } else if (role === ROLES.REGION_DIRECTOR) {
         filter.regionId = org.region || new mongoose.Types.ObjectId();
-      } else if (role === "state_director") {
+      } else if (role === ROLES.STATE_DIRECTOR) {
         filter.stateId = org.state || new mongoose.Types.ObjectId();
-      } else if (role === "district_director") {
+      } else if (role === ROLES.DISTRICT_DIRECTOR) {
         filter.districtId = org.district || new mongoose.Types.ObjectId();
-      } else if (["launch_director", "direct_consultant", "chapter_president", "vice_president", "secretary"].includes(role)) {
+      } else if ([ROLES.LAUNCH_DIRECTOR, ROLES.DIRECT_CONSULTANT, ROLES.CHAPTER_PRESIDENT, ROLES.VICE_PRESIDENT, ROLES.SECRETARY].includes(role)) {
         filter.chapterId = org.chapter || new mongoose.Types.ObjectId();
       } else {
         // regular members can only view their own
         filter.user = user._id;
       }
+    } else if (isVicePresident) {
+      const meta = getUserMeta(user);
+      const org = meta.adminProfile?.organization || {};
+      filter.chapterId = org.chapter || new mongoose.Types.ObjectId();
     }
 
     const page = parseInt(query.page) || 1;
@@ -289,14 +303,31 @@ class VendorApplicationService {
 
     // Validate boundaries
     const role = user.role;
-    const isGlobal = ["superadmin", "admin"].includes(role);
-    if (!isGlobal && app.user?.toString() !== user._id.toString()) {
+    const isGlobal = [ROLES.SUPERADMIN, ROLES.ADMIN].includes(role);
+    const isOwner = app.user?.toString() === user._id.toString();
+
+    if (HIDDEN_FROM_EXISTING_WORKFLOW_STATUSES.includes(app.status) && !isOwner && role !== ROLES.VICE_PRESIDENT) {
+      throw new AppError("This vendor application is not available in the current approval queue.", 403);
+    }
+
+    if (!isGlobal && !isOwner) {
       const meta = getUserMeta(user);
       const org = meta.adminProfile?.organization || {};
 
-      if (role === "executive_director" && app.chapterId?.toString() !== org.chapter?.toString()) {
+      if (role === ROLES.EXECUTIVE_DIRECTOR && app.chapterId?.toString() !== org.chapter?.toString()) {
         throw new AppError("Access denied to this chapter's application", 403);
       }
+
+      if (role === ROLES.VICE_PRESIDENT) {
+        if (app.chapterId?.toString() !== org.chapter?.toString()) {
+          throw new AppError("Access denied to this chapter's application", 403);
+        }
+        if (!VP_REVIEW_STATUSES.includes(app.status)) {
+          throw new AppError("This vendor application is no longer in Vice President review.", 403);
+        }
+      }
+    } else if (role === ROLES.VICE_PRESIDENT && !VP_REVIEW_STATUSES.includes(app.status) && !isOwner) {
+      throw new AppError("This vendor application is no longer in Vice President review.", 403);
     }
 
     return app;
@@ -307,40 +338,61 @@ class VendorApplicationService {
     if (!app) throw new AppError("Vendor application not found", 404);
 
     // Single approval rule: if already approved/rejected, block subsequent modifications
-    if (["approved", "rejected"].includes(app.status)) {
+    if (["approved", "rejected", "rejected_by_vp"].includes(app.status)) {
       throw new AppError(`This application is already finalized as ${app.status} and cannot be modified.`, 400);
     }
 
     // Role check
     const role = reviewerUser.role;
-    const isAuthorized = ["superadmin", "admin", "executive_director"].includes(role);
+    const isVpReview = app.status === "pending_vp_review";
+    const isAuthorized = isVpReview
+      ? role === ROLES.VICE_PRESIDENT
+      : [ROLES.SUPERADMIN, ROLES.ADMIN, ROLES.EXECUTIVE_DIRECTOR].includes(role);
     if (!isAuthorized) {
-      throw new AppError("Only the Chapter Director or Admin can approve/reject vendor applications.", 403);
+      throw new AppError(isVpReview ? "Only the Vice President can review this application." : "Only the Chapter Director or Admin can approve/reject vendor applications.", 403);
     }
 
-    // Boundaries checking for Chapter Director
-    if (role === "executive_director") {
-      const meta = getUserMeta(reviewerUser);
-      const org = meta.adminProfile?.organization || {};
-      if (app.chapterId?.toString() !== org.chapter?.toString()) {
-        throw new AppError("You can only review applications belonging to your assigned Chapter.", 403);
-      }
+    if (isVpReview && !["submitted", "rejected_by_vp"].includes(status)) {
+      throw new AppError("Vice President can only forward or reject this application.", 400);
+    }
+    if (!isVpReview && status === "submitted") {
+      throw new AppError("Invalid status transition.", 400);
     }
 
-    const previousStatus = app.status;
-    app.status = status;
+    const meta = getUserMeta(reviewerUser);
+    const org = meta.adminProfile?.organization || {};
+    if (app.chapterId?.toString() !== org.chapter?.toString() && [ROLES.EXECUTIVE_DIRECTOR, ROLES.VICE_PRESIDENT].includes(role)) {
+      throw new AppError("You can only review applications belonging to your assigned Chapter.", 403);
+    }
+
     app.adminNotes = adminNotes;
-    app.reviewedBy = reviewerUser._id;
-    app.reviewedByRole = role;
-    app.reviewedAt = new Date();
+    const now = new Date();
+    const isVpForward = isVpReview && status === "submitted";
+    const isVpReject = isVpReview && status === "rejected_by_vp";
 
-    app.workflowHistory.push({
-      user: reviewerUser._id,
-      role,
-      action: status,
-      remarks: adminNotes || `Application ${status}`,
-      timestamp: new Date(),
-    });
+    if (isVpForward) {
+      app.status = "submitted";
+      app.workflowHistory.push({
+        user: reviewerUser._id,
+        role,
+        action: "forwarded",
+        remarks: adminNotes || "Forwarded to marketplace approval",
+        timestamp: now,
+      });
+    } else {
+      app.status = status;
+      app.reviewedBy = reviewerUser._id;
+      app.reviewedByRole = role;
+      app.reviewedAt = now;
+
+      app.workflowHistory.push({
+        user: reviewerUser._id,
+        role,
+        action: status,
+        remarks: adminNotes || `Application ${status}`,
+        timestamp: now,
+      });
+    }
 
     await app.save();
 
@@ -414,28 +466,53 @@ class VendorApplicationService {
       );
 
       await User.findByIdAndUpdate(app.user, {
-        role: "vendor",
+        role: ROLES.VENDOR,
         "vendorProfile.status": "approved",
         "vendorProfile.vendorId": createdVendor._id,
         "vendorProfile.approvedAt": new Date(),
         "vendorProfile.approvedBy": reviewerUser._id,
       });
-    } else if (status === "rejected") {
+    } else if (status === "rejected" || isVpReject) {
       await User.findByIdAndUpdate(app.user, {
         "vendorProfile.status": "rejected"
       });
     }
 
-    // Notify member (applicant)
-    await notificationService.sendNotification({
-      recipientId: app.user,
-      type: status === "approved" ? "system" : "system",
-      title: status === "approved" ? "Vendor Application Approved" : "Vendor Application Rejected",
-      message: status === "approved"
-        ? "Congratulations! Your vendor application has been approved. Your profile is now active in the directory."
-        : `Your vendor application has been rejected. Notes: ${adminNotes || "Requirements not met"}`,
-      link: "/member/vendor-application-status",
-    });
+    if (isVpForward) {
+      const reviewerRecipients = app.chapterId
+        ? await User.find({
+            role: { $in: [ROLES.ADMIN, ROLES.SUPERADMIN, ROLES.EXECUTIVE_DIRECTOR] },
+            $or: [
+              { role: { $in: [ROLES.ADMIN, ROLES.SUPERADMIN] } },
+              {
+                role: ROLES.EXECUTIVE_DIRECTOR,
+                "meta.adminProfile.organization.chapter": app.chapterId,
+              },
+            ],
+          }).select("_id")
+        : [];
+      const reviewerIds = reviewerRecipients.map((recipient) => recipient._id.toString());
+      if (reviewerIds.length > 0) {
+        await notificationService.sendBulkNotifications({
+          recipientIds: reviewerIds,
+          type: "system",
+          title: "Vendor Application Forwarded",
+          message: `Vendor application ${app.applicationNumber} has been forwarded by the Vice President.`,
+          link: "/admin/applications/vendor",
+        });
+      }
+    } else {
+      // Notify member (applicant)
+      await notificationService.sendNotification({
+        recipientId: app.user,
+        type: status === "approved" ? "system" : "system",
+        title: status === "approved" ? "Vendor Application Approved" : "Vendor Application Rejected",
+        message: status === "approved"
+          ? "Congratulations! Your vendor application has been approved. Your profile is now active in the directory."
+          : `Your vendor application has been rejected. Notes: ${adminNotes || "Requirements not met"}`,
+        link: "/member/vendor-application-status",
+      });
+    }
 
     // Audit Logging
     await AuditLog.create({

@@ -1,3 +1,4 @@
+const { ROLES } = require("../constants/roleConfig");
 const MembershipApplication = require("../models/MembershipApplication");
 const User = require("../models/User");
 const EnterpriseRecord = require("../models/EnterpriseRecord");
@@ -53,7 +54,7 @@ exports.createApplication = asyncHandler(async (req, res) => {
   }
 
   const role = req.user.role;
-  const isSuperOrAdmin = ["superadmin", "admin"].includes(role);
+  const isSuperOrAdmin = [ROLES.SUPERADMIN, ROLES.ADMIN].includes(role);
 
   // Check if they already have an application
   let application = await MembershipApplication.findOne({ submittedBy: req.user._id });
@@ -70,11 +71,11 @@ exports.createApplication = asyncHandler(async (req, res) => {
   let targetRegionId = payload.regionId;
 
   if (status === "submitted" && !isSuperOrAdmin) {
-    if (role !== "vice_president" && role !== "customer") {
+    if (role !== ROLES.VICE_PRESIDENT && role !== ROLES.CUSTOMER) {
       throw new AppError("Only Chapter Vice Presidents and Applicants can submit membership applications.", 403);
     }
 
-    if (role === "vice_president") {
+    if (role === ROLES.VICE_PRESIDENT) {
       const meta = getUserMeta(req.user);
       const profile = meta.adminProfile || {};
       const org = profile.organization || {};
@@ -177,7 +178,7 @@ exports.createApplication = asyncHandler(async (req, res) => {
   }
 
   // Sync location/chapter to customer user meta so officials can see them in their roster
-  if (status === "submitted" && req.user && req.user.role === "customer" && hierarchy.chapter) {
+  if (status === "submitted" && req.user && req.user.role === ROLES.CUSTOMER && hierarchy.chapter) {
     const userMeta = getUserMeta(req.user);
     req.user.meta = {
       ...userMeta,
@@ -207,7 +208,7 @@ exports.createApplication = asyncHandler(async (req, res) => {
       officials.regionDirectorId,
     ].filter(Boolean);
 
-    const adminUsers = await User.find({ role: { $in: ["admin", "superadmin"] } }).select("_id email name");
+    const adminUsers = await User.find({ role: { $in: [ROLES.ADMIN, ROLES.SUPERADMIN] } }).select("_id email name");
     const adminIds = adminUsers.map((a) => a._id);
 
     const recipientIds = [...new Set([...officialIds.map(id => id.toString()), ...adminIds.map(id => id.toString())])];
@@ -274,7 +275,7 @@ exports.getApplications = asyncHandler(async (req, res) => {
 
   // Jurisdictional visibility filtering
   const role = req.user.role;
-  const isSuperOrAdmin = ["superadmin", "admin"].includes(role);
+  const isSuperOrAdmin = [ROLES.SUPERADMIN, ROLES.ADMIN].includes(role);
 
   if (!isSuperOrAdmin) {
     const meta = getUserMeta(req.user);
@@ -307,13 +308,13 @@ exports.getApplications = asyncHandler(async (req, res) => {
     const locationIds = await resolveLocationIds(org);
 
     // Apply query filters according to role
-    if (role === "region_director") {
+    if (role === ROLES.REGION_DIRECTOR) {
       filter.regionId = locationIds.regionId || new mongoose.Types.ObjectId();
-    } else if (role === "state_director") {
+    } else if (role === ROLES.STATE_DIRECTOR) {
       filter.stateId = locationIds.stateId || new mongoose.Types.ObjectId();
-    } else if (role === "district_director") {
+    } else if (role === ROLES.DISTRICT_DIRECTOR) {
       filter.districtId = locationIds.districtId || new mongoose.Types.ObjectId();
-    } else if (["executive_director", "launch_director", "direct_consultant", "chapter_president", "vice_president"].includes(role)) {
+    } else if ([ROLES.EXECUTIVE_DIRECTOR, ROLES.LAUNCH_DIRECTOR, ROLES.DIRECT_CONSULTANT, ROLES.CHAPTER_PRESIDENT, ROLES.VICE_PRESIDENT].includes(role)) {
       filter.chapterId = locationIds.chapterId || new mongoose.Types.ObjectId();
     } else {
       // Any other user should only see their own applications
@@ -374,7 +375,7 @@ exports.getApplications = asyncHandler(async (req, res) => {
     .lean();
 
   if (!req.query.status || req.query.status === "submitted" || req.query.status === "pending_review") {
-    const pendingUsers = await User.find({ role: "customer", status: "pending_approval" })
+    const pendingUsers = await User.find({ role: ROLES.CUSTOMER, status: "pending_approval" })
       .populate("referredBy")
       .lean();
     
@@ -420,13 +421,13 @@ exports.getApplications = asyncHandler(async (req, res) => {
         const loggedInState = getNestedVal(loggedInMeta, 'adminProfile.organization.state') || getNestedVal(loggedInMeta, 'memberProfile.organization.state');
         const loggedInRegion = getNestedVal(loggedInMeta, 'adminProfile.organization.region') || getNestedVal(loggedInMeta, 'memberProfile.organization.region');
 
-        if (role === "region_director") {
+        if (role === ROLES.REGION_DIRECTOR) {
           isVisible = userRegion?.toString() === loggedInRegion?.toString();
-        } else if (role === "state_director") {
+        } else if (role === ROLES.STATE_DIRECTOR) {
           isVisible = userState?.toString() === loggedInState?.toString();
-        } else if (role === "district_director") {
+        } else if (role === ROLES.DISTRICT_DIRECTOR) {
           isVisible = userDistrict?.toString() === loggedInDistrict?.toString();
-        } else if (["executive_director", "launch_director", "direct_consultant", "chapter_president", "vice_president"].includes(role)) {
+        } else if ([ROLES.EXECUTIVE_DIRECTOR, ROLES.LAUNCH_DIRECTOR, ROLES.DIRECT_CONSULTANT, ROLES.CHAPTER_PRESIDENT, ROLES.VICE_PRESIDENT].includes(role)) {
           isVisible = userChapter?.toString() === loggedInChapter?.toString();
         }
       }
@@ -445,7 +446,7 @@ exports.getApplications = asyncHandler(async (req, res) => {
             _id: user._id,
             name: user.name,
             email: user.email,
-            role: "customer",
+            role: ROLES.CUSTOMER,
             referredBy: user.referredBy
           },
           createdAt: user.createdAt,
@@ -512,7 +513,7 @@ exports.getApplicationById = asyncHandler(async (req, res) => {
     .populate("chapterId", "name code");
   if (!application) {
     const user = await User.findById(req.params.id).populate("referredBy", "name email referralCode");
-    if (user && user.role === "customer") {
+    if (user && user.role === ROLES.CUSTOMER) {
       application = {
         _id: user._id,
         applicationNumber: "N/A",
@@ -526,7 +527,7 @@ exports.getApplicationById = asyncHandler(async (req, res) => {
           _id: user._id,
           name: user.name,
           email: user.email,
-          role: "customer",
+          role: ROLES.CUSTOMER,
           referredBy: user.referredBy
         },
         createdAt: user.createdAt,
@@ -570,7 +571,7 @@ exports.updateApplicationStatus = asyncHandler(async (req, res) => {
   let application = await MembershipApplication.findById(req.params.id);
   if (!application) {
     const user = await User.findById(req.params.id);
-    if (user && user.role === "customer") {
+    if (user && user.role === ROLES.CUSTOMER) {
       if (status === "approved") {
         user.status = "approved";
         user.isActive = true;
@@ -590,21 +591,21 @@ exports.updateApplicationStatus = asyncHandler(async (req, res) => {
   }
 
   const role = normalizeReviewerRole(req.user.role);
-  const isSuperAdmin = role === "superadmin";
-  const isAdmin = role === "admin";
+  const isSuperAdmin = role === ROLES.SUPERADMIN;
+  const isAdmin = role === ROLES.ADMIN;
   const userOrg = getUserMeta(req.user)?.adminProfile?.organization || {};
 
-  const isVicePresident = role === "vice_president" && (
+  const isVicePresident = role === ROLES.VICE_PRESIDENT && (
     application.vicePresidentId?.toString() === req.user._id.toString() ||
     userOrg.chapter?.toString() === application.chapterId?.toString()
   );
 
-  const isDirectConsultant = role === "direct_consultant" && (
+  const isDirectConsultant = role === ROLES.DIRECT_CONSULTANT && (
     application.directConsultantId?.toString() === req.user._id.toString() ||
     userOrg.chapter?.toString() === application.chapterId?.toString()
   );
 
-  const isExecutiveDirector = role === "executive_director" && (
+  const isExecutiveDirector = role === ROLES.EXECUTIVE_DIRECTOR && (
     application.executiveDirectorId?.toString() === req.user._id.toString() ||
     userOrg.chapter?.toString() === application.chapterId?.toString()
   );
@@ -681,7 +682,7 @@ exports.updateApplicationStatus = asyncHandler(async (req, res) => {
       application.regionDirectorId?.toString()
     ].filter(Boolean);
 
-    const adminUsers = await User.find({ role: { $in: ["admin", "superadmin"] } }).select("_id email name");
+    const adminUsers = await User.find({ role: { $in: [ROLES.ADMIN, ROLES.SUPERADMIN] } }).select("_id email name");
     const adminIds = adminUsers.map((a) => a._id.toString());
     const allRecipients = [...new Set([...recipientIds, ...adminIds])];
 

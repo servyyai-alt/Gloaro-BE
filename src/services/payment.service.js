@@ -1,3 +1,4 @@
+const { ROLES } = require("../constants/roleConfig");
 const Razorpay = require("razorpay");
 const Stripe = require("stripe");
 const crypto = require("crypto");
@@ -267,7 +268,7 @@ class PaymentService {
   }
 
   async getPaymentById(paymentId, userId, role) {
-    const payment = await Payment.findById(paymentId).populate("user", "name email").populate("vendor", "businessName");
+    const payment = await Payment.findById(paymentId).populate("user", "name email").populate(ROLES.VENDOR, "businessName");
     if (!payment) throw new AppError("Payment not found", 404);
     if (!isAdminRole(role) && payment.user._id.toString() !== userId.toString()) {
       throw new AppError("Not authorized", 403);

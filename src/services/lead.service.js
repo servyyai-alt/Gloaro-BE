@@ -1,3 +1,4 @@
+const { ROLES } = require("../constants/roleConfig");
 const Lead = require("../models/Lead");
 const Vendor = require("../models/Vendor");
 const Notification = require("../models/Notification");
@@ -55,11 +56,11 @@ class LeadService {
     const { page, limit, skip } = getPagination(query);
     const filter = {};
 
-    if (role === "vendor") {
+    if (role === ROLES.VENDOR) {
       const vendor = await Vendor.findOne({ user: userId });
       if (!vendor) throw new AppError("Vendor profile not found", 404);
       filter.vendor = vendor._id;
-    } else if (["customer", "user"].includes(role)) {
+    } else if ([ROLES.CUSTOMER, "user"].includes(role)) {
       filter.submittedBy = userId;
     } else if (vendorId) {
       filter.vendor = vendorId;
@@ -71,7 +72,7 @@ class LeadService {
 
     const [leads, total] = await Promise.all([
       Lead.find(filter)
-        .populate("vendor", "businessName")
+        .populate(ROLES.VENDOR, "businessName")
         .populate("submittedBy", "name email")
         .populate("assignedTo", "name email")
         .sort("-createdAt")
@@ -85,19 +86,19 @@ class LeadService {
 
   async getLeadById(leadId, userId, role) {
     const lead = await Lead.findById(leadId)
-      .populate("vendor")
+      .populate(ROLES.VENDOR)
       .populate("submittedBy", "name email")
       .populate("assignedTo", "name email")
       .populate("notes.addedBy", "name");
 
     if (!lead) throw new AppError("Lead not found", 404);
 
-    if (role === "vendor") {
+    if (role === ROLES.VENDOR) {
       const vendor = await Vendor.findOne({ user: userId });
       if (!vendor || lead.vendor._id.toString() !== vendor._id.toString()) {
         throw new AppError("Not authorized", 403);
       }
-    } else if (["customer", "user"].includes(role)) {
+    } else if ([ROLES.CUSTOMER, "user"].includes(role)) {
       if (!lead.submittedBy || lead.submittedBy._id.toString() !== userId.toString()) {
         throw new AppError("Not authorized", 403);
       }
@@ -117,7 +118,7 @@ class LeadService {
     const lead = await Lead.findById(leadId);
     if (!lead) throw new AppError("Lead not found", 404);
 
-    if (role === "vendor") {
+    if (role === ROLES.VENDOR) {
       const vendor = await Vendor.findOne({ user: userId });
       if (!vendor || lead.vendor.toString() !== vendor._id.toString()) {
         throw new AppError("Not authorized", 403);
@@ -137,7 +138,7 @@ class LeadService {
   }
 
   async assertLeadManager(lead, userId, role) {
-    if (role === "vendor") {
+    if (role === ROLES.VENDOR) {
       const vendor = await Vendor.findOne({ user: userId });
       if (!vendor || lead.vendor.toString() !== vendor._id.toString()) {
         throw new AppError("Not authorized", 403);

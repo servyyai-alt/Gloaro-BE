@@ -1,3 +1,4 @@
+const { ROLES } = require("./roleConfig");
 const { ADMIN_ROLE_VALUES } = require("./adminRoles");
 
 const roles = ADMIN_ROLE_VALUES;
@@ -41,7 +42,7 @@ const accessFor = (enabled = true) => ({
 
 const featureMatrix = roles.reduce((result, role) => {
   result[role] = modules.reduce((moduleConfig, moduleName) => {
-    const enabled = role === "superadmin" || role === "admin" || role === "custom_admin" || !["vendors", "marketplace", "settings"].includes(moduleName);
+    const enabled = role === ROLES.SUPERADMIN || role === ROLES.ADMIN || role === ROLES.CUSTOM_ADMIN || !["vendors", "marketplace", "settings"].includes(moduleName);
     moduleConfig[moduleName] = accessFor(enabled);
     return moduleConfig;
   }, {});
@@ -49,7 +50,7 @@ const featureMatrix = roles.reduce((result, role) => {
 }, {});
 
 const dashboardWidgets = {
-  superadmin: [
+  [ROLES.SUPERADMIN]: [
     { id: "membershipGrowth", title: "Membership Growth", enabled: true, order: 1, size: "large" },
     { id: "businessGrowth", title: "Business Growth", enabled: true, order: 2, size: "large" },
     { id: "meetings", title: "Meetings", enabled: true, order: 3, size: "small" },
@@ -73,15 +74,15 @@ const sidebar = roles.reduce((result, role) => {
 
 const workflows = {
   membership: [
-    { id: "launch_director", label: "Launch Director", order: 1, requiredRole: "launch_director" },
-    { id: "executive_director", label: "Executive Director", order: 2, requiredRole: "executive_director" },
-    { id: "verification", label: "Membership Verification Team", order: 3, requiredRole: "admin" },
-    { id: "approved", label: "Approved", order: 4, requiredRole: "superadmin" },
+    { id: ROLES.LAUNCH_DIRECTOR, label: "Launch Director", order: 1, requiredRole: ROLES.LAUNCH_DIRECTOR },
+    { id: ROLES.EXECUTIVE_DIRECTOR, label: "Executive Director", order: 2, requiredRole: ROLES.EXECUTIVE_DIRECTOR },
+    { id: "verification", label: "Membership Verification Team", order: 3, requiredRole: ROLES.ADMIN },
+    { id: "approved", label: "Approved", order: 4, requiredRole: ROLES.SUPERADMIN },
   ],
   vendor: [
-    { id: "executive_director", label: "Executive Director", order: 1, requiredRole: "executive_director" },
-    { id: "marketplace_admin", label: "Marketplace Admin", order: 2, requiredRole: "admin" },
-    { id: "approved", label: "Approved", order: 3, requiredRole: "superadmin" },
+    { id: ROLES.EXECUTIVE_DIRECTOR, label: "Executive Director", order: 1, requiredRole: ROLES.EXECUTIVE_DIRECTOR },
+    { id: ROLES.MARKETPLACE_ADMIN, label: "Marketplace Admin", order: 2, requiredRole: ROLES.ADMIN },
+    { id: "approved", label: "Approved", order: 3, requiredRole: ROLES.SUPERADMIN },
   ],
 };
 

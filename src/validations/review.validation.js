@@ -1,7 +1,8 @@
+const { ROLES } = require("../constants/roleConfig");
 const { body } = require("express-validator");
 
 const createReviewValidation = [
-  body("vendor").isMongoId().withMessage("Valid vendor ID is required"),
+  body(ROLES.VENDOR).isMongoId().withMessage("Valid vendor ID is required"),
   body("rating")
     .isInt({ min: 1, max: 5 })
     .withMessage("Rating must be between 1 and 5"),

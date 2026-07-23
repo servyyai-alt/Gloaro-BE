@@ -1,3 +1,4 @@
+const { ROLES } = require("../constants/roleConfig");
 const authService = require("../services/auth.service");
 const { asyncHandler } = require("../middleware/errorHandler");
 const { setTokenCookies, clearTokenCookies } = require("../utils/jwt");
@@ -258,7 +259,7 @@ exports.validateReferral = asyncHandler(async (req, res) => {
           id: refUser?._id,
           name: refUser?.name || "Member1",
           chapter: chapterName,
-          role: refUser?.role || "customer"
+          role: refUser?.role || ROLES.CUSTOMER
         }
       });
     }

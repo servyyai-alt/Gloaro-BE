@@ -1,3 +1,4 @@
+const { ROLES } = require("../constants/roleConfig");
 const express = require("express");
 const router = express.Router();
 const notificationController = require("../controllers/notification.controller");
@@ -130,21 +131,21 @@ const notificationBodyValidation = [
 
 router.post(
   "/broadcast",
-  authorize("admin", "superadmin"),
+  authorize(ROLES.ADMIN, ROLES.SUPERADMIN),
   notificationBodyValidation,
   validate,
   notificationController.sendBroadcast
 );
 router.post(
   "/users/:userId",
-  authorize("admin", "superadmin"),
+  authorize(ROLES.ADMIN, ROLES.SUPERADMIN),
   notificationBodyValidation,
   validate,
   notificationController.sendUserNotification
 );
 router.post(
   "/vendors/:vendorId",
-  authorize("admin", "superadmin"),
+  authorize(ROLES.ADMIN, ROLES.SUPERADMIN),
   notificationBodyValidation,
   validate,
   notificationController.sendVendorNotification
