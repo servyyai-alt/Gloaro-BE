@@ -1,7 +1,8 @@
+const { ROLES } = require("../constants/roleConfig");
 const { body } = require("express-validator");
 
 const submitLeadValidation = [
-  body("vendor").isMongoId().withMessage("Valid vendor ID is required"),
+  body(ROLES.VENDOR).isMongoId().withMessage("Valid vendor ID is required"),
   body("name").trim().notEmpty().withMessage("Name is required").isLength({ max: 100 }),
   body("email").optional().isEmail().withMessage("Invalid email format").normalizeEmail(),
   body("phone")

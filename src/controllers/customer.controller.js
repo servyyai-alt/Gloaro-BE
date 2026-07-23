@@ -1,3 +1,4 @@
+const { ROLES } = require("../constants/roleConfig");
 const Wishlist = require("../models/Wishlist");
 const Lead = require("../models/Lead");
 const Event = require("../models/Event");
@@ -5,7 +6,7 @@ const { AppError, asyncHandler } = require("../middleware/errorHandler");
 const { successResponse, paginatedResponse, getPagination } = require("../utils/response");
 
 const getWishlistField = (itemType) => {
-  if (itemType === "vendor") return "vendor";
+  if (itemType === ROLES.VENDOR) return ROLES.VENDOR;
   if (itemType === "product") return "product";
   if (itemType === "service") return "service";
   throw new AppError("Invalid wishlist item type", 400);
@@ -18,7 +19,7 @@ exports.getWishlist = asyncHandler(async (req, res) => {
 
   const [items, total] = await Promise.all([
     Wishlist.find(filter)
-      .populate("vendor", "businessName slug logo address stats")
+      .populate(ROLES.VENDOR, "businessName slug logo address stats")
       .populate("product", "title slug images pricing stats")
       .populate("service", "title slug gallery pricing stats")
       .sort("-createdAt")
@@ -58,7 +59,7 @@ exports.getMyEnquiries = asyncHandler(async (req, res) => {
 
   const [leads, total] = await Promise.all([
     Lead.find(filter)
-      .populate("vendor", "businessName slug logo")
+      .populate(ROLES.VENDOR, "businessName slug logo")
       .populate("service", "title slug")
       .populate("product", "title slug")
       .sort("-createdAt")

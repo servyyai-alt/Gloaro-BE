@@ -1,3 +1,4 @@
+const { ROLES } = require("../constants/roleConfig");
 const { MembershipPlan, Membership } = require("../models/Membership");
 const Vendor = require("../models/Vendor");
 const { AppError, asyncHandler } = require("../middleware/errorHandler");
@@ -112,7 +113,7 @@ exports.getAllMemberships = asyncHandler(async (req, res) => {
   if (req.query.plan) filter.plan = req.query.plan;
 
   const [memberships, total] = await Promise.all([
-    Membership.find(filter).populate("vendor", "businessName").populate("user", "name email").sort("-createdAt").skip(skip).limit(limit),
+    Membership.find(filter).populate(ROLES.VENDOR, "businessName").populate("user", "name email").sort("-createdAt").skip(skip).limit(limit),
     Membership.countDocuments(filter),
   ]);
   paginatedResponse(res, memberships, page, limit, total);

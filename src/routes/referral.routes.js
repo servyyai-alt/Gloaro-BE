@@ -1,3 +1,4 @@
+const { ROLES } = require("../constants/roleConfig");
 const express = require("express");
 const router = express.Router();
 const referralController = require("../controllers/referral.controller");
@@ -61,7 +62,7 @@ router.get("/my/stats", referralController.getReferralStats);
  *       403:
  *         description: Not authorized
  */
-router.get("/", authorize("admin", "superadmin"), referralController.getAllReferrals);
+router.get("/", authorize(ROLES.ADMIN, ROLES.SUPERADMIN), referralController.getAllReferrals);
 
 /**
  * @swagger
@@ -94,6 +95,6 @@ router.get("/", authorize("admin", "superadmin"), referralController.getAllRefer
  *       403:
  *         description: Not authorized
  */
-router.patch("/:id/reward", authorize("admin", "superadmin"), referralController.processReferralReward);
+router.patch("/:id/reward", authorize(ROLES.ADMIN, ROLES.SUPERADMIN), referralController.processReferralReward);
 
 module.exports = router;

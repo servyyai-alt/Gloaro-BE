@@ -1,3 +1,4 @@
+const { ROLES } = require("../constants/roleConfig");
 const mongoose = require("mongoose");
 const User = require("../models/User");
 
@@ -17,20 +18,20 @@ const getUserOrg = (user) => {
 
 const getScopedUserFilter = (user) => {
   if (!user) return {};
-  const isGlobal = ["superadmin", "admin"].includes(user?.role);
+  const isGlobal = [ROLES.SUPERADMIN, ROLES.ADMIN].includes(user?.role);
   if (isGlobal) return {};
 
   const org = getUserOrg(user);
 
-  if (user.role === "region_director") {
+  if (user.role === ROLES.REGION_DIRECTOR) {
     if (!org.region) return { _id: null }; // block if no region assigned
     return { "meta.adminProfile.organization.region": org.region.toString() };
   }
-  if (user.role === "state_director") {
+  if (user.role === ROLES.STATE_DIRECTOR) {
     if (!org.state) return { _id: null };
     return { "meta.adminProfile.organization.state": org.state.toString() };
   }
-  if (user.role === "district_director") {
+  if (user.role === ROLES.DISTRICT_DIRECTOR) {
     if (!org.district) return { _id: null };
     return { "meta.adminProfile.organization.district": org.district.toString() };
   }
@@ -41,7 +42,7 @@ const getScopedUserFilter = (user) => {
 };
 
 const getAllowedUserIds = async (user) => {
-  const isGlobal = ["superadmin", "admin"].includes(user?.role);
+  const isGlobal = [ROLES.SUPERADMIN, ROLES.ADMIN].includes(user?.role);
   if (isGlobal) return null;
 
   const filter = getScopedUserFilter(user);
@@ -51,20 +52,20 @@ const getAllowedUserIds = async (user) => {
 
 const getScopedVendorFilter = (user) => {
   if (!user) return {};
-  const isGlobal = ["superadmin", "admin"].includes(user?.role);
+  const isGlobal = [ROLES.SUPERADMIN, ROLES.ADMIN].includes(user?.role);
   if (isGlobal) return {};
 
   const org = getUserOrg(user);
 
-  if (user.role === "region_director") {
+  if (user.role === ROLES.REGION_DIRECTOR) {
     if (!org.region) return { _id: null };
     return { regionId: new mongoose.Types.ObjectId(org.region) };
   }
-  if (user.role === "state_director") {
+  if (user.role === ROLES.STATE_DIRECTOR) {
     if (!org.state) return { _id: null };
     return { stateId: new mongoose.Types.ObjectId(org.state) };
   }
-  if (user.role === "district_director") {
+  if (user.role === ROLES.DISTRICT_DIRECTOR) {
     if (!org.district) return { _id: null };
     return { districtId: new mongoose.Types.ObjectId(org.district) };
   }

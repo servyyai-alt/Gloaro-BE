@@ -1,3 +1,4 @@
+const { ROLES } = require("../constants/roleConfig");
 const Counter = require("../models/Counter");
 const { AppError } = require("../middleware/errorHandler");
 
@@ -126,21 +127,21 @@ class IdGeneratorService {
   async generateExecutiveDirectorId(metadata = {}) {
     const stateCode = this.normalize(metadata.stateCode || metadata.state, "State code", { length: 2 });
     const areaCode = this.normalize(metadata.areaCode || metadata.cityCode || metadata.area || metadata.city, "Area code", { length: 3 });
-    const sequence = await this.getNextSequence(`executive_director:${stateCode}:${areaCode}`);
+    const sequence = await this.getNextSequence(`${ROLES.EXECUTIVE_DIRECTOR}:${stateCode}:${areaCode}`);
     return `ED-${stateCode}-${areaCode}-${this.pad(sequence, 3)}`;
   }
 
   async generateLaunchDirectorId(metadata = {}) {
     const stateCode = this.normalize(metadata.stateCode || metadata.state, "State code", { length: 2 });
     const areaCode = this.normalize(metadata.areaCode || metadata.cityCode || metadata.area || metadata.city, "Area code", { length: 3 });
-    const sequence = await this.getNextSequence(`launch_director:${stateCode}:${areaCode}`);
+    const sequence = await this.getNextSequence(`${ROLES.LAUNCH_DIRECTOR}:${stateCode}:${areaCode}`);
     return `LD-${stateCode}-${areaCode}-${this.pad(sequence, 3)}`;
   }
 
   async generateDirectConsultantId(metadata = {}) {
     const stateCode = this.normalize(metadata.stateCode || metadata.state, "State code", { length: 2 });
     const areaCode = this.normalize(metadata.areaCode || metadata.cityCode || metadata.area || metadata.city, "Area code", { length: 3 });
-    const sequence = await this.getNextSequence(`direct_consultant:${stateCode}:${areaCode}`);
+    const sequence = await this.getNextSequence(`${ROLES.DIRECT_CONSULTANT}:${stateCode}:${areaCode}`);
     return `DC-${stateCode}-${areaCode}-${this.pad(sequence, 3)}`;
   }
 
@@ -249,15 +250,15 @@ class IdGeneratorService {
   async generateOfficialId(metadata = {}) {
     const role = metadata.role || "";
     const rolePrefixes = {
-      region_director: "RD",
-      state_director: "SD",
-      district_director: "DD",
-      executive_director: "ED",
-      launch_director: "LD",
-      direct_consultant: "DC",
-      chapter_president: "CP",
-      vice_president: "VP",
-      secretary: "SEC"
+      [ROLES.REGION_DIRECTOR]: "RD",
+      [ROLES.STATE_DIRECTOR]: "SD",
+      [ROLES.DISTRICT_DIRECTOR]: "DD",
+      [ROLES.EXECUTIVE_DIRECTOR]: "ED",
+      [ROLES.LAUNCH_DIRECTOR]: "LD",
+      [ROLES.DIRECT_CONSULTANT]: "DC",
+      [ROLES.CHAPTER_PRESIDENT]: "CP",
+      [ROLES.VICE_PRESIDENT]: "VP",
+      [ROLES.SECRETARY]: "SEC"
     };
 
     const prefix = rolePrefixes[role] || "OFF";
@@ -298,9 +299,9 @@ class IdGeneratorService {
       if (normalizedType === "region") return this.generateRegionId(metadata);
       if (normalizedType === "state") return this.generateStateId(metadata);
       if (normalizedType === "area") return this.generateAreaId(metadata);
-      if (["executive_director", "executiveDirector", "ed"].includes(normalizedType)) return this.generateExecutiveDirectorId(metadata);
-      if (["launch_director", "launchDirector", "ld"].includes(normalizedType)) return this.generateLaunchDirectorId(metadata);
-      if (["direct_consultant", "directConsultant", "dc"].includes(normalizedType)) return this.generateDirectConsultantId(metadata);
+      if ([ROLES.EXECUTIVE_DIRECTOR, "executiveDirector", "ed"].includes(normalizedType)) return this.generateExecutiveDirectorId(metadata);
+      if ([ROLES.LAUNCH_DIRECTOR, "launchDirector", "ld"].includes(normalizedType)) return this.generateLaunchDirectorId(metadata);
+      if ([ROLES.DIRECT_CONSULTANT, "directConsultant", "dc"].includes(normalizedType)) return this.generateDirectConsultantId(metadata);
     }
 
     if (module === "chapter") return this.generateChapterId(metadata);
@@ -323,7 +324,7 @@ class IdGeneratorService {
       case "directConsultant": return this.generateDirectConsultantId(metadata);
       case "chapter": return this.generateChapterId(metadata);
       case "member": return this.generateMemberId(metadata);
-      case "vendor": return this.generateVendorId(metadata);
+      case ROLES.VENDOR: return this.generateVendorId(metadata);
       case "visitor": return this.generateVisitorId(metadata);
       case "referral": return this.generateReferralId(metadata);
       case "meeting": return this.generateMeetingId(metadata);

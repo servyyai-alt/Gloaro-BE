@@ -1,3 +1,4 @@
+const { ROLES } = require("../constants/roleConfig");
 const express = require("express");
 const router = express.Router();
 const categoryController = require("../controllers/category.controller");
@@ -49,7 +50,7 @@ router.get("/", categoryController.getCategories);
  */
 router.get("/:id", categoryController.getCategoryById);
 
-router.use(protect, authorize("admin", "superadmin"));
+router.use(protect, authorize(ROLES.ADMIN, ROLES.SUPERADMIN));
 
 /**
  * @swagger

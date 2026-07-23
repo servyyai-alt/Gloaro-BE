@@ -1,3 +1,4 @@
+const { ROLES } = require("../constants/roleConfig");
 const express = require("express");
 const router = express.Router();
 const { body, query } = require("express-validator");
@@ -5,14 +6,14 @@ const customerController = require("../controllers/customer.controller");
 const { protect, authorize } = require("../middleware/auth");
 const { validate } = require("../middleware/validate");
 
-router.use(protect, authorize("customer", "user"));
+router.use(protect, authorize(ROLES.CUSTOMER, "user"));
 
 router.get("/wishlist", customerController.getWishlist);
 
 router.post(
   "/wishlist",
   [
-    body("itemType").isIn(["vendor", "product", "service"]).withMessage("itemType must be vendor, product, or service"),
+    body("itemType").isIn([ROLES.VENDOR, "product", "service"]).withMessage("itemType must be vendor, product, or service"),
     body("itemId").isMongoId().withMessage("Valid itemId required"),
     body("notes").optional().isString().trim().isLength({ max: 500 }).withMessage("Notes can be up to 500 characters"),
   ],
@@ -23,7 +24,7 @@ router.post(
 router.delete(
   "/wishlist/:itemId",
   [
-    query("itemType").isIn(["vendor", "product", "service"]).withMessage("itemType query is required"),
+    query("itemType").isIn([ROLES.VENDOR, "product", "service"]).withMessage("itemType query is required"),
   ],
   validate,
   customerController.removeFromWishlist

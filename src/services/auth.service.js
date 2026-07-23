@@ -1,3 +1,4 @@
+const { ROLES } = require("../constants/roleConfig");
 const crypto = require("crypto");
 const User = require("../models/User");
 const Referral = require("../models/Referral");
@@ -18,7 +19,7 @@ const getUserMeta = (user) => {
 
 class AuthService {
   async register(data) {
-    const { name, email, phone, password, role = "customer", referralCode } = data;
+    const { name, email, phone, password, role = ROLES.CUSTOMER, referralCode } = data;
 
     const existingUser = await User.findOne({ email });
     if (existingUser) throw new AppError("Email already registered", 409);
@@ -38,7 +39,7 @@ class AuthService {
       }
     }
 
-    const finalRole = ["vendor", "customer", "user"].includes(role) ? (role === "user" ? "customer" : role) : "customer";
+    const finalRole = [ROLES.VENDOR, ROLES.CUSTOMER, "user"].includes(role) ? (role === "user" ? ROLES.CUSTOMER : role) : ROLES.CUSTOMER;
 
     const user = await User.create({
       name,
@@ -48,7 +49,7 @@ class AuthService {
       role: finalRole,
       referredBy: referrer?._id,
       referralCode: await idGenerator.generateMemberReferralCode(),
-      status: (finalRole === "customer") ? "pending_approval" : "approved",
+      status: (finalRole === ROLES.CUSTOMER) ? "pending_approval" : "approved",
     });
 
     if (bniReferral) {
@@ -86,7 +87,7 @@ class AuthService {
       });
 
       // Admin alert
-      const admins = await User.find({ role: { $in: ["admin", "superadmin"] } }).select("_id");
+      const admins = await User.find({ role: { $in: [ROLES.ADMIN, ROLES.SUPERADMIN] } }).select("_id");
       if (admins.length > 0) {
         await notificationService.sendBulkNotifications({
           recipientIds: admins.map(a => a._id.toString()),
@@ -108,8 +109,8 @@ class AuthService {
     if (!user) throw new AppError("Invalid email or password", 401);
 
     if (user.isLocked) throw new AppError("Account locked. Try again after 2 hours.", 423);
-    if (user.status === "pending_approval" && user.role !== "customer") throw new AppError("Account pending approval. Please wait for directory approval.", 403);
-    if (user.status === "rejected" && user.role !== "customer") throw new AppError("Account registration rejected.", 403);
+    if (user.status === "pending_approval" && user.role !== ROLES.CUSTOMER) throw new AppError("Account pending approval. Please wait for directory approval.", 403);
+    if (user.status === "rejected" && user.role !== ROLES.CUSTOMER) throw new AppError("Account registration rejected.", 403);
     if (!user.isActive) throw new AppError("Account deactivated", 401);
     if (user.isSuspended) throw new AppError("Account suspended: " + user.suspendedReason, 403);
     if (user.isBlocked) throw new AppError("Account blocked: " + user.blockedReason, 403);

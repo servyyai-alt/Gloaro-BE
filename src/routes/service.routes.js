@@ -1,3 +1,4 @@
+const { ROLES } = require("../constants/roleConfig");
 const express = require("express");
 const router = express.Router();
 const serviceController = require("../controllers/service.controller");
@@ -126,7 +127,7 @@ router.use(protect);
  *       403:
  *         description: Not authorized (vendor only)
  */
-router.post("/", authorize("vendor"), uploadMultiple("gallery", "services"), serviceController.createService);
+router.post("/", authorize(ROLES.VENDOR), uploadMultiple("gallery", "services"), serviceController.createService);
 
 /**
  * @swagger
@@ -217,6 +218,6 @@ router.delete("/:id", serviceController.deleteService);
  *       403:
  *         description: Not authorized
  */
-router.patch("/:id/approve", authorize("admin", "superadmin"), serviceController.approveService);
+router.patch("/:id/approve", authorize(ROLES.ADMIN, ROLES.SUPERADMIN), serviceController.approveService);
 
 module.exports = router;

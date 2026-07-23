@@ -1,3 +1,4 @@
+const { ROLES } = require("../constants/roleConfig");
 const express = require("express");
 const router = express.Router();
 const supportController = require("../controllers/support.controller");
@@ -40,7 +41,7 @@ router.post(
   [
     body("subject").trim().notEmpty().withMessage("Subject is required"),
     body("description").trim().notEmpty().withMessage("Description is required"),
-    body("category").optional().isIn(["billing", "technical", "account", "vendor", "general", "other"]).withMessage("Invalid category"),
+    body("category").optional().isIn(["billing", "technical", "account", ROLES.VENDOR, "general", "other"]).withMessage("Invalid category"),
     body("priority").optional().isIn(["low", "medium", "high", "critical"]).withMessage("Invalid priority"),
   ],
   validate,
@@ -71,7 +72,7 @@ router.post(
  */
 router.get("/my", supportController.getMyTickets);
 
-router.get("/admin/dashboard", authorize("admin", "superadmin"), supportController.getSupportDashboard);
+router.get("/admin/dashboard", authorize(ROLES.ADMIN, ROLES.SUPERADMIN), supportController.getSupportDashboard);
 
 /**
  * @swagger
@@ -195,7 +196,7 @@ router.patch(
  *       403:
  *         description: Not authorized
  */
-router.get("/", authorize("admin", "superadmin"), supportController.getAllTickets);
+router.get("/", authorize(ROLES.ADMIN, ROLES.SUPERADMIN), supportController.getAllTickets);
 
 /**
  * @swagger
@@ -229,7 +230,7 @@ router.get("/", authorize("admin", "superadmin"), supportController.getAllTicket
  */
 router.patch(
   "/:id/assign",
-  authorize("admin", "superadmin"),
+  authorize(ROLES.ADMIN, ROLES.SUPERADMIN),
   [body("assignedTo").isMongoId().withMessage("Valid assignedTo user ID required")],
   validate,
   supportController.assignTicket

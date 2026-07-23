@@ -1,3 +1,4 @@
+const { ROLES } = require("../constants/roleConfig");
 const User = require("../models/User");
 const Vendor = require("../models/Vendor");
 const AuditLog = require("../models/AuditLog");
@@ -168,7 +169,7 @@ class ReportService {
 
     let productFilter = { status: "approved", isActive: true };
     let serviceFilter = { status: "approved", isActive: true };
-    if (caller && !["superadmin", "admin"].includes(caller.role)) {
+    if (caller && ![ROLES.SUPERADMIN, ROLES.ADMIN].includes(caller.role)) {
       const allowedVendorIds = (await Vendor.find(scopedVendorFilter).select("_id").lean()).map(v => v._id);
       productFilter.vendor = { $in: allowedVendorIds };
       serviceFilter.vendor = { $in: allowedVendorIds };
@@ -266,7 +267,7 @@ class ReportService {
   async getOfficialReport(query = {}) {
     const { from, to } = this._getDateRange(query);
     const dateFilter = { createdAt: { $gte: from, $lte: to } };
-    const filter = { role: { $in: ["region_director", "state_director", "district_director", "executive_director", "launch_director", "direct_consultant", "chapter_president", "vice_president", "secretary"] }, ...dateFilter };
+    const filter = { role: { $in: [ROLES.REGION_DIRECTOR, ROLES.STATE_DIRECTOR, ROLES.DISTRICT_DIRECTOR, ROLES.EXECUTIVE_DIRECTOR, ROLES.LAUNCH_DIRECTOR, ROLES.DIRECT_CONSULTANT, ROLES.CHAPTER_PRESIDENT, ROLES.VICE_PRESIDENT, ROLES.SECRETARY] }, ...dateFilter };
     
     const [total, byRole] = await Promise.all([
       User.countDocuments(filter),

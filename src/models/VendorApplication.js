@@ -19,7 +19,7 @@ const vendorApplicationSchema = new mongoose.Schema(
     step: { type: Number, default: 1 },
     status: {
       type: String,
-      enum: ["draft", "submitted", "under_review", "approved", "rejected"],
+      enum: ["draft", "pending_vp_review", "rejected_by_vp", "submitted", "under_review", "approved", "rejected"],
       default: "draft",
     },
     // Step 1: Vendor Agreement & Marketplace Policies

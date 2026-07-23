@@ -1,3 +1,4 @@
+const { ROLES } = require("../constants/roleConfig");
 const EnterpriseRecord = require("../models/EnterpriseRecord");
 const User = require("../models/User");
 const { AppError } = require("../middleware/errorHandler");
@@ -72,53 +73,53 @@ const resolveOfficials = async (hierarchy) => {
   // Resolve Vice President
   let vicePresidentId = chapter.assignedTo || chapter.metadata?.vicePresident;
   if (!vicePresidentId) {
-    vicePresidentId = await findOfficialByRoleAndLocation("vice_president", "chapter", chapter);
+    vicePresidentId = await findOfficialByRoleAndLocation(ROLES.VICE_PRESIDENT, "chapter", chapter);
   }
 
   // Resolve Chapter President
   let chapterPresidentId = chapter.director;
   if (!chapterPresidentId) {
-    chapterPresidentId = await findOfficialByRoleAndLocation("chapter_president", "chapter", chapter);
+    chapterPresidentId = await findOfficialByRoleAndLocation(ROLES.CHAPTER_PRESIDENT, "chapter", chapter);
   }
 
   // Resolve Direct Consultant (Assigned at Chapter level under simplified hierarchy)
   let directConsultantId = chapter.metadata?.directConsultant;
   if (!directConsultantId) {
-    directConsultantId = await findOfficialByRoleAndLocation("direct_consultant", "chapter", chapter);
+    directConsultantId = await findOfficialByRoleAndLocation(ROLES.DIRECT_CONSULTANT, "chapter", chapter);
   }
 
   // Resolve Launch Director (Assigned at Chapter level under simplified hierarchy)
   let launchDirectorId = chapter.metadata?.launchDirector;
   if (!launchDirectorId) {
-    launchDirectorId = await findOfficialByRoleAndLocation("launch_director", "chapter", chapter);
+    launchDirectorId = await findOfficialByRoleAndLocation(ROLES.LAUNCH_DIRECTOR, "chapter", chapter);
   }
 
   // Resolve Executive Director
   let executiveDirectorId = district.assignedTo || district.metadata?.executiveDirector;
   if (!executiveDirectorId) {
-    executiveDirectorId = await findOfficialByRoleAndLocation("executive_director", "district", district);
+    executiveDirectorId = await findOfficialByRoleAndLocation(ROLES.EXECUTIVE_DIRECTOR, "district", district);
   }
 
   // Resolve District Director
   let districtDirectorId = district.director || district.metadata?.districtDirector;
   if (!districtDirectorId) {
-    districtDirectorId = await findOfficialByRoleAndLocation("district_director", "district", district);
+    districtDirectorId = await findOfficialByRoleAndLocation(ROLES.DISTRICT_DIRECTOR, "district", district);
   }
 
   // Resolve State Director
   let stateDirectorId = state.director || state.metadata?.stateDirector;
   if (!stateDirectorId) {
-    stateDirectorId = await findOfficialByRoleAndLocation("state_director", "state", state);
+    stateDirectorId = await findOfficialByRoleAndLocation(ROLES.STATE_DIRECTOR, "state", state);
   }
 
   // Resolve Region Director
   let regionDirectorId = region.director || region.metadata?.regionDirector;
   if (!regionDirectorId) {
-    regionDirectorId = await findOfficialByRoleAndLocation("region_director", "region", region);
+    regionDirectorId = await findOfficialByRoleAndLocation(ROLES.REGION_DIRECTOR, "region", region);
   }
 
   // Assign a default admin if there is one
-  const adminUser = await User.findOne({ role: "admin" }).select("_id");
+  const adminUser = await User.findOne({ role: ROLES.ADMIN }).select("_id");
   const assignedAdminId = adminUser ? adminUser._id : null;
 
   return {

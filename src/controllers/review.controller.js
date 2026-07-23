@@ -1,3 +1,4 @@
+const { ROLES } = require("../constants/roleConfig");
 const Review = require("../models/Review");
 const Vendor = require("../models/Vendor");
 const { AppError, asyncHandler } = require("../middleware/errorHandler");
@@ -29,7 +30,7 @@ exports.getAllReviews = asyncHandler(async (req, res) => {
   if (req.query.status) filter.status = req.query.status;
   if (req.query.vendor) filter.vendor = req.query.vendor;
   const [reviews, total] = await Promise.all([
-    Review.find(filter).populate("user", "name email").populate("vendor", "businessName").sort("-createdAt").skip(skip).limit(limit),
+    Review.find(filter).populate("user", "name email").populate(ROLES.VENDOR, "businessName").sort("-createdAt").skip(skip).limit(limit),
     Review.countDocuments(filter),
   ]);
   paginatedResponse(res, reviews, page, limit, total);
@@ -48,7 +49,7 @@ exports.moderateReview = asyncHandler(async (req, res) => {
 });
 
 exports.replyToReview = asyncHandler(async (req, res) => {
-  const review = await Review.findById(req.params.id).populate("vendor");
+  const review = await Review.findById(req.params.id).populate(ROLES.VENDOR);
   if (!review) throw new AppError("Review not found", 404);
   const vendor = await Vendor.findOne({ user: req.user._id });
   const isVendorOwner = vendor && review.vendor._id.toString() === vendor._id.toString();

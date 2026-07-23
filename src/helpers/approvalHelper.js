@@ -1,3 +1,4 @@
+const { ROLES } = require("../constants/roleConfig");
 const MembershipApplication = require("../models/MembershipApplication");
 const User = require("../models/User");
 const EnterpriseRecord = require("../models/EnterpriseRecord");
@@ -48,7 +49,7 @@ async function validateChapterCapacity(targetChapterId, session = null) {
     throw new AppError("Chapter selection is required", 400);
   }
   const activeCount = await User.countDocuments({
-    role: "customer",
+    role: ROLES.CUSTOMER,
     "meta.adminProfile.organization.chapter": targetChapterId.toString(),
     isActive: true,
     isSuspended: { $ne: true },
@@ -239,7 +240,7 @@ async function processMembershipApproval(applicationId, status, adminNotes, reqU
         application.regionDirectorId?.toString()
       ].filter(Boolean);
 
-      const adminUsers = await User.find({ role: { $in: ["admin", "superadmin"] } }).select("_id");
+      const adminUsers = await User.find({ role: { $in: [ROLES.ADMIN, ROLES.SUPERADMIN] } }).select("_id");
       const adminIds = adminUsers.map((a) => a._id.toString());
       const allRecipients = [...new Set([...recipientIds, ...adminIds])];
 
@@ -430,7 +431,7 @@ async function processLegacyMembershipApproval(userId, status, adminNotes, reqUs
         officials.regionDirectorId?.toString()
       ].filter(Boolean);
 
-      const adminUsers = await User.find({ role: { $in: ["admin", "superadmin"] } }).select("_id");
+      const adminUsers = await User.find({ role: { $in: [ROLES.ADMIN, ROLES.SUPERADMIN] } }).select("_id");
       const adminIds = adminUsers.map((a) => a._id.toString());
       const allRecipients = [...new Set([...recipientIds, ...adminIds])];
 

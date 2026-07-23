@@ -1,3 +1,4 @@
+const { ROLES } = require("../constants/roleConfig");
 const express = require("express");
 const router = express.Router();
 const reviewController = require("../controllers/review.controller");
@@ -151,7 +152,7 @@ router.post("/:id/reply", reviewController.replyToReview);
  *       403:
  *         description: Not authorized
  */
-router.get("/", authorize("admin", "superadmin"), reviewController.getAllReviews);
+router.get("/", authorize(ROLES.ADMIN, ROLES.SUPERADMIN), reviewController.getAllReviews);
 
 /**
  * @swagger
@@ -186,6 +187,6 @@ router.get("/", authorize("admin", "superadmin"), reviewController.getAllReviews
  *       403:
  *         description: Not authorized
  */
-router.patch("/:id/moderate", authorize("admin", "superadmin"), reviewController.moderateReview);
+router.patch("/:id/moderate", authorize(ROLES.ADMIN, ROLES.SUPERADMIN), reviewController.moderateReview);
 
 module.exports = router;

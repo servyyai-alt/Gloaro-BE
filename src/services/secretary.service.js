@@ -1,3 +1,4 @@
+const { ROLES } = require("../constants/roleConfig");
 const User = require("../models/User");
 const Event = require("../models/Event");
 
@@ -21,8 +22,8 @@ class SecretaryService {
     const org = profile.organization || {};
     const chapterId = org.chapter;
 
-    const filter = { role: { $in: ["customer", "user"] }, status: { $nin: ["pending_approval", "rejected"] } };
-    const activeFilter = { role: { $in: ["customer", "user"] }, isActive: true, status: { $nin: ["pending_approval", "rejected"] } };
+    const filter = { role: { $in: [ROLES.CUSTOMER, "user"] }, status: { $nin: ["pending_approval", "rejected"] } };
+    const activeFilter = { role: { $in: [ROLES.CUSTOMER, "user"] }, isActive: true, status: { $nin: ["pending_approval", "rejected"] } };
 
     if (chapterId) {
       filter["meta.adminProfile.organization.chapter"] = chapterId.toString();
@@ -80,7 +81,7 @@ class SecretaryService {
     const org = profile.organization || {};
     const chapterId = org.chapter;
 
-    const filter = { role: { $in: ["customer", "user"] } };
+    const filter = { role: { $in: [ROLES.CUSTOMER, "user"] } };
 
     if (chapterId) {
       filter["meta.adminProfile.organization.chapter"] = chapterId.toString();
@@ -102,7 +103,7 @@ class SecretaryService {
       filter.isActive = false;
     }
 
-    const baseFilter = { role: { $in: ["customer", "user"] } };
+    const baseFilter = { role: { $in: [ROLES.CUSTOMER, "user"] } };
     if (chapterId) {
       baseFilter["meta.adminProfile.organization.chapter"] = chapterId.toString();
     }

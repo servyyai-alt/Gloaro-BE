@@ -1,3 +1,4 @@
+const { ROLES } = require("../constants/roleConfig");
 const express = require("express");
 const router = express.Router();
 const authController = require("../controllers/auth.controller");
@@ -56,7 +57,7 @@ router.post(
     body("name").trim().notEmpty().withMessage("Name is required"),
     body("email").isEmail().withMessage("Valid email required"),
     body("password").isLength({ min: 8 }).withMessage("Password must be at least 8 characters"),
-    body("role").optional().isIn(["customer", "vendor", "user"]).withMessage("Role must be customer or vendor"),
+    body("role").optional().isIn([ROLES.CUSTOMER, ROLES.VENDOR, "user"]).withMessage("Role must be customer or vendor"),
     body("phone").optional().trim().isLength({ min: 7 }).withMessage("Phone must be valid"),
     body("referralCode").optional().trim().isLength({ min: 4 }).withMessage("Referral code must be valid"),
   ],

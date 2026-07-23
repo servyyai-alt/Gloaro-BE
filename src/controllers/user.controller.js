@@ -1,3 +1,4 @@
+const { ROLES } = require("../constants/roleConfig");
 const User = require("../models/User");
 const AuditLog = require("../models/AuditLog");
 const { AppError, asyncHandler } = require("../middleware/errorHandler");
@@ -19,16 +20,16 @@ exports.getUsers = asyncHandler(async (req, res) => {
   if (status === "blocked") filter.isBlocked = true;
   const caller = req.user;
 
-  if (caller?.role === "region_director") {
-    if (filter.role === "customer" || req.query.role === "customer") {
+  if (caller?.role === ROLES.REGION_DIRECTOR) {
+    if (filter.role === ROLES.CUSTOMER || req.query.role === ROLES.CUSTOMER) {
       return paginatedResponse(res, [], page, limit, 0, "Region Director cannot access member roster");
     } else if (!filter.role) {
-      filter.role = { $ne: "customer" };
+      filter.role = { $ne: ROLES.CUSTOMER };
     }
   }
 
   let locationFilter = {};
-  const isGlobal = ["superadmin", "admin"].includes(caller?.role);
+  const isGlobal = [ROLES.SUPERADMIN, ROLES.ADMIN].includes(caller?.role);
   if (!isGlobal) {
     const meta = (caller.toObject ? caller.toObject({ flattenMaps: true }).meta : caller.meta) || {};
     const org = meta.adminProfile?.organization || {};
@@ -83,13 +84,13 @@ exports.getUsers = asyncHandler(async (req, res) => {
     filter.$and = conditions;
   }
 
-  if (filter.role === "customer" || req.query.role === "customer") {
-    if (!["vice_president", "executive_director"].includes(req.user.role)) {
+  if (filter.role === ROLES.CUSTOMER || req.query.role === ROLES.CUSTOMER) {
+    if (![ROLES.VICE_PRESIDENT, ROLES.EXECUTIVE_DIRECTOR].includes(req.user.role)) {
       filter.status = { $nin: ["pending_approval", "rejected"] };
     }
   } else if (!filter.role) {
     filter.$or = [
-      { role: { $ne: "customer" } },
+      { role: { $ne: ROLES.CUSTOMER } },
       { status: { $nin: ["pending_approval", "rejected"] } }
     ];
   }

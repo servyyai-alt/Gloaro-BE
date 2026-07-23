@@ -1,3 +1,4 @@
+const { ROLES } = require("../constants/roleConfig");
 const express = require("express");
 const router = express.Router();
 const reportController = require("../controllers/report.controller");
@@ -10,7 +11,7 @@ router.use(protect, (req, res, next) => {
   if (cleanPath === "analytics") {
     return authorize(...ADMIN_ROLE_VALUES)(req, res, next);
   }
-  return authorize("admin", "superadmin")(req, res, next);
+  return authorize(ROLES.ADMIN, ROLES.SUPERADMIN)(req, res, next);
 });
 
 /**

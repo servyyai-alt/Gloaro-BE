@@ -1,3 +1,4 @@
+const { ROLES } = require("../constants/roleConfig");
 const Permission = require("../models/Permission");
 const RolePermission = require("../models/RolePermission");
 const UserPermission = require("../models/UserPermission");
@@ -6,7 +7,7 @@ const AuditLog = require("../models/AuditLog");
 const ALL_MODULES = [
   "dashboard", "members", "meetings", "attendance", "visitors", "business_wall",
   "referrals", "training", "events", "announcements", "reports", "marketplace",
-  "vendor", "products", "services", "payments", "orders", "coupons", "subscriptions",
+  ROLES.VENDOR, "products", "services", "payments", "orders", "coupons", "subscriptions",
   "support", "organization", "users", "roles", "permissions", "audit_logs",
   "settings", "notifications", "community", "ai_insights", "calendar",
   "leaderboard", "business_directory", "chat", "tasks", "help_desk",
@@ -50,15 +51,15 @@ class PermissionService {
       // Seed/Upsert default RolePermissions
       const rolePermissionsData = [
         {
-          role: "superadmin",
+          role: ROLES.SUPERADMIN,
           permissions: allPermCodes
         },
         {
-          role: "admin",
+          role: ROLES.ADMIN,
           permissions: allPermCodes.filter(c => !c.includes("login-as"))
         },
         {
-          role: "chapter_president",
+          role: ROLES.CHAPTER_PRESIDENT,
           permissions: allPermCodes.filter(c => 
             c.startsWith("dashboard") || c.startsWith("members") || c.startsWith("meetings") || 
             c.startsWith("attendance") || c.startsWith("visitors") || c.startsWith("reports") ||
@@ -66,7 +67,7 @@ class PermissionService {
           )
         },
         {
-          role: "vice_president",
+          role: ROLES.VICE_PRESIDENT,
           permissions: allPermCodes.filter(c => 
             c.startsWith("dashboard") || c.startsWith("members") || c.startsWith("meetings") || 
             c.startsWith("attendance") || c.startsWith("visitors") || c.startsWith("reports") ||
@@ -75,27 +76,27 @@ class PermissionService {
           )
         },
         {
-          role: "secretary",
+          role: ROLES.SECRETARY,
           permissions: allPermCodes.filter(c => 
             c.startsWith("dashboard") || c.startsWith("members.view") || c.startsWith("meetings") || 
             c.startsWith("attendance") || c.startsWith("visitors") || c.startsWith("reports")
           )
         },
         {
-          role: "customer",
+          role: ROLES.CUSTOMER,
           permissions: allPermCodes.filter(c => 
             c.endsWith(".view") || c.startsWith("dashboard") || c.startsWith("business_wall") || 
             c.startsWith("referrals") || c.startsWith("one_to_one") || c.startsWith("visitors") ||
             c.startsWith("calendar") || c.startsWith("chat") || c.startsWith("digital_membership_card")
           )
         },
-        ...["region_director", "state_director", "district_director", "executive_director", "launch_director", "direct_consultant"].map(r => ({
+        ...[ROLES.REGION_DIRECTOR, ROLES.STATE_DIRECTOR, ROLES.DISTRICT_DIRECTOR, ROLES.EXECUTIVE_DIRECTOR, ROLES.LAUNCH_DIRECTOR, ROLES.DIRECT_CONSULTANT].map(r => ({
           role: r,
           permissions: allPermCodes.filter(c => 
             c.startsWith("dashboard") || c.startsWith("members") || c.startsWith("meetings") || 
             c.startsWith("attendance") || c.startsWith("visitors") || c.startsWith("reports") ||
             c.startsWith("business_wall") || c.startsWith("referrals") || c.startsWith("community") ||
-            c.startsWith("announcements") || c.startsWith("vendor") || c.startsWith("products") ||
+            c.startsWith("announcements") || c.startsWith(ROLES.VENDOR) || c.startsWith("products") ||
             c.startsWith("services") || c.startsWith("payments") || c.startsWith("orders") ||
             c.startsWith("subscriptions") || c.startsWith("marketplace") || c.startsWith("leads")
           )
@@ -117,15 +118,15 @@ class PermissionService {
   }
 
   async hasPermission(userId, role, permissionCode) {
-    if (role === "superadmin") return true;
+    if (role === ROLES.SUPERADMIN) return true;
 
     let checkRole = role;
-    if (role === "vendor") {
-      const vendorPrefixes = ["vendor", "products", "services", "payments", "orders", "subscriptions", "marketplace", "leads"];
+    if (role === ROLES.VENDOR) {
+      const vendorPrefixes = [ROLES.VENDOR, "products", "services", "payments", "orders", "subscriptions", "marketplace", "leads"];
       if (vendorPrefixes.some(pref => permissionCode.startsWith(pref))) {
         return true;
       }
-      checkRole = "customer";
+      checkRole = ROLES.CUSTOMER;
     }
 
     // 1. Check custom user overrides
@@ -144,17 +145,17 @@ class PermissionService {
   }
 
   async getUserPermissionsList(userId, role) {
-    if (role === "superadmin") {
+    if (role === ROLES.SUPERADMIN) {
       const all = await Permission.find().select("code");
       return all.map(p => p.code);
     }
 
     let checkRole = role;
     let extraPerms = [];
-    if (role === "vendor") {
-      checkRole = "customer";
+    if (role === ROLES.VENDOR) {
+      checkRole = ROLES.CUSTOMER;
       const allVendorPerms = await Permission.find({
-        module: { $in: ["vendor", "products", "services", "payments", "orders", "subscriptions", "marketplace", "leads"] }
+        module: { $in: [ROLES.VENDOR, "products", "services", "payments", "orders", "subscriptions", "marketplace", "leads"] }
       }).select("code");
       extraPerms = allVendorPerms.map(p => p.code);
     }
@@ -177,7 +178,7 @@ class PermissionService {
     const caller = await require("../models/User").findById(callerId);
     if (!caller) throw new Error("Caller user not found");
 
-    if (caller.role !== "superadmin") {
+    if (caller.role !== ROLES.SUPERADMIN) {
       const callerPerms = await this.getUserPermissionsList(caller._id, caller.role);
       for (const p of permissionsArray) {
         if (!callerPerms.includes(p)) {

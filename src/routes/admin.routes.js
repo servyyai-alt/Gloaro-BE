@@ -1,3 +1,4 @@
+const { ROLES } = require("../constants/roleConfig");
 const express = require("express");
 const router = express.Router();
 const adminController = require("../controllers/admin.controller");
@@ -24,7 +25,7 @@ const inferAdminModule = (path) => {
   if (path.startsWith("/super-config") || path.startsWith("/settings") || path.startsWith("/system")) return "settings";
   if (path.startsWith("/audit-logs")) return "reports";
   if (path.startsWith("/enterprise/search")) return "settings";
-  if (path.includes("vendor")) return "vendors";
+  if (path.includes(ROLES.VENDOR)) return "vendors";
   if (path.includes("marketplace") || path.includes("products") || path.includes("services") || path.includes("banners")) return "marketplace";
   if (path.includes("membership") || path.includes("users") || path.includes("plans") || path.includes("members")) return "members";
   if (path.includes("visitor")) return "visitors";
@@ -48,7 +49,7 @@ const requiredPermission = (method) => {
 };
 
 router.use((req, res, next) => {
-  if (req.user.role === "superadmin") return next();
+  if (req.user.role === ROLES.SUPERADMIN) return next();
   const profile = getMeta(req.user).adminProfile;
   if (!profile?.modules?.length) return next();
   if (req.path.startsWith("/super-config/role/")) return next();
@@ -163,8 +164,8 @@ router.get("/audit-logs", adminController.getAuditLogs);
  *       403:
  *         description: Not authorized (superadmin only)
  */
-router.get("/system-stats", authorize("superadmin"), adminController.getSystemStats);
-router.get("/system-logs", authorize("superadmin"), adminController.getSystemLogs);
+router.get("/system-stats", authorize(ROLES.SUPERADMIN), adminController.getSystemStats);
+router.get("/system-logs", authorize(ROLES.SUPERADMIN), adminController.getSystemLogs);
 router.get("/admin-accounts", authorize(...ADMIN_ROLE_VALUES), adminController.getAdminAccounts);
 router.get("/members", authorize(...ADMIN_ROLE_VALUES), adminController.getApprovedMembers);
 router.post(
@@ -193,7 +194,7 @@ router.patch(
 );
 router.post(
   "/admin-accounts/:id/clone",
-  authorize("superadmin"),
+  authorize(ROLES.SUPERADMIN),
   [
     body("email").isEmail().withMessage("Valid email is required"),
     body("password").isLength({ min: 8 }).withMessage("Password must be at least 8 characters"),
@@ -222,7 +223,7 @@ router.patch(
   validate,
   adminController.transferAdminOrganization
 );
-router.post("/admin-accounts/:id/login-as", authorize("superadmin"), adminController.loginAsAdmin);
+router.post("/admin-accounts/:id/login-as", authorize(ROLES.SUPERADMIN), adminController.loginAsAdmin);
 router.get("/admin-accounts/:id/activity", authorize(...ADMIN_ROLE_VALUES), adminController.getAdminActivity);
 router.delete("/admin-accounts/:id", authorize(...ADMIN_ROLE_VALUES), adminController.deleteAdminAccount);
 router.get("/enterprise/search", adminController.globalEnterpriseSearch);
@@ -278,19 +279,19 @@ router.patch(
   adminController.transitionEnterpriseRecord
 );
 router.delete("/enterprise-records/:id", adminController.deleteEnterpriseRecord);
-router.get("/super-config", authorize("superadmin"), adminController.getSuperAdminConfig);
+router.get("/super-config", authorize(ROLES.SUPERADMIN), adminController.getSuperAdminConfig);
 router.get("/super-config/role/:role", authorize(...ADMIN_ROLE_VALUES), adminController.getRoleConfiguration);
-router.get("/super-config/:section", authorize("superadmin"), adminController.getSuperAdminConfigSection);
+router.get("/super-config/:section", authorize(ROLES.SUPERADMIN), adminController.getSuperAdminConfigSection);
 router.put(
   "/super-config/:section",
-  authorize("superadmin"),
+  authorize(ROLES.SUPERADMIN),
   [body("value").exists().withMessage("Configuration value is required")],
   validate,
   adminController.updateSuperAdminConfigSection
 );
 router.patch(
   "/super-config/features/:role/:module",
-  authorize("superadmin"),
+  authorize(ROLES.SUPERADMIN),
   [
     body("enabled").optional().isBoolean(),
     body("canView").optional().isBoolean(),

@@ -1,3 +1,4 @@
+const { ROLES } = require("../constants/roleConfig");
 const express = require("express");
 const router = express.Router();
 const vendorController = require("../controllers/vendor.controller");
@@ -128,12 +129,12 @@ router.get("/:id", vendorController.getVendorById);
 
 router.use(protect);
 
-router.get("/me/dashboard", authorize("vendor"), vendorController.getMyDashboard);
-router.get("/me/products", authorize("vendor", "customer", "user"), vendorController.getMyProducts);
-router.get("/me/services", authorize("vendor"), vendorController.getMyServices);
-router.get("/me/reviews", authorize("vendor"), vendorController.getMyReviews);
-router.get("/me/payments", authorize("vendor"), vendorController.getMyPayments);
-router.get("/me/subscriptions", authorize("vendor"), vendorController.getMySubscriptions);
+router.get("/me/dashboard", authorize(ROLES.VENDOR), vendorController.getMyDashboard);
+router.get("/me/products", authorize(ROLES.VENDOR, ROLES.CUSTOMER, "user"), vendorController.getMyProducts);
+router.get("/me/services", authorize(ROLES.VENDOR), vendorController.getMyServices);
+router.get("/me/reviews", authorize(ROLES.VENDOR), vendorController.getMyReviews);
+router.get("/me/payments", authorize(ROLES.VENDOR), vendorController.getMyPayments);
+router.get("/me/subscriptions", authorize(ROLES.VENDOR), vendorController.getMySubscriptions);
 
 /**
  * @swagger
@@ -299,7 +300,7 @@ router.delete("/:id", vendorController.deleteVendor);
  *       403:
  *         description: Not authorized
  */
-router.patch("/:id/approve", authorize("admin", "superadmin"), vendorController.approveVendor);
+router.patch("/:id/approve", authorize(ROLES.ADMIN, ROLES.SUPERADMIN), vendorController.approveVendor);
 
 /**
  * @swagger
@@ -320,6 +321,6 @@ router.patch("/:id/approve", authorize("admin", "superadmin"), vendorController.
  *       403:
  *         description: Not authorized
  */
-router.patch("/:id/feature", authorize("admin", "superadmin"), vendorController.featureVendor);
+router.patch("/:id/feature", authorize(ROLES.ADMIN, ROLES.SUPERADMIN), vendorController.featureVendor);
 
 module.exports = router;

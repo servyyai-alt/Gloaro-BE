@@ -1,3 +1,4 @@
+const { ROLES } = require("../constants/roleConfig");
 const express = require("express");
 const router = express.Router();
 const leadController = require("../controllers/lead.controller");
@@ -28,7 +29,7 @@ router.post(
   "/",
   optionalAuth,
   [
-    body("vendor").notEmpty().withMessage("Vendor ID required"),
+    body(ROLES.VENDOR).notEmpty().withMessage("Vendor ID required"),
     body("name").trim().notEmpty().withMessage("Name required"),
     body("phone").notEmpty().withMessage("Phone required"),
     body("subject").notEmpty().withMessage("Subject required"),
@@ -237,6 +238,6 @@ router.post("/:id/followups", leadController.scheduleFollowUp);
  *       403:
  *         description: Not authorized
  */
-router.patch("/:id/assign", authorize("admin", "superadmin"), leadController.assignLead);
+router.patch("/:id/assign", authorize(ROLES.ADMIN, ROLES.SUPERADMIN), leadController.assignLead);
 
 module.exports = router;

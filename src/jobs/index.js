@@ -1,3 +1,4 @@
+const { ROLES } = require("../constants/roleConfig");
 const cron = require("node-cron");
 const logger = require("../utils/logger");
 const { Membership } = require("../models/Membership");
@@ -27,7 +28,7 @@ const startJobs = () => {
           status: "active",
           endDate: { $gte: startOfDay, $lte: endOfDay },
           expiryNotificationSent: false,
-        }).populate("user", "name email preferences").populate("vendor", "businessName");
+        }).populate("user", "name email preferences").populate(ROLES.VENDOR, "businessName");
 
         for (const membership of expiring) {
           const notificationService = require("../services/notification.service");
